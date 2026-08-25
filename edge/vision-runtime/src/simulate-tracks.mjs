@@ -1,4 +1,6 @@
 import { adaptFrameDetections } from "./track-event-adapter.mjs";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
 
 const model = {
   name: "simulated-yolo-bytetrack-adapter",
@@ -24,7 +26,7 @@ export function buildSimulatedTrackEvents({ cameraId = "cam-bop-01-east", starte
   return events;
 }
 
-if (import.meta.url === `file://${process.argv[1].replaceAll("\\", "/")}`) {
+if (process.argv[1] && fileURLToPath(import.meta.url) === path.resolve(process.argv[1])) {
   for (const event of buildSimulatedTrackEvents()) {
     console.log(JSON.stringify(event));
   }

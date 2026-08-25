@@ -1,0 +1,11 @@
+[
+  {
+    "zoneId": "zone-east-fence",
+    "cameraId": "cam-bop-01-east",
+    "name": "East virtual fence",
+    "line": { "a": { "x": 640, "y": 0 }, "b": { "x": 640, "y": 720 } },
+    "direction": "LEFT_TO_RIGHT",
+    "severity": "HIGH",
+    "persistenceFrames": 1
+  }
+]

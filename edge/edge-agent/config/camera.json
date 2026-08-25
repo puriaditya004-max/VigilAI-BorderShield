@@ -1,0 +1,7 @@
+{
+  "cameraId": "cam-bop-01-east",
+  "name": "BOP 01 East Gate Camera",
+  "edgeNodeId": "edge-bop-01",
+  "location": "East perimeter",
+  "streamUri": "rtsp://camera.local/stream1"
+}

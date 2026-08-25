@@ -1,0 +1,62 @@
+openapi: 3.1.0
+info:
+  title: VigilAI BorderShield Control API
+  version: 0.1.0
+  description: Edge-to-command API for camera health, incidents, evidence manifests and audit.
+servers:
+  - url: http://localhost:7080
+paths:
+  /health:
+    get:
+      summary: Service health
+      responses:
+        "200":
+          description: Service is running
+  /api/cameras/register:
+    post:
+      summary: Register or reconnect an edge camera
+      responses:
+        "200":
+          description: Registered camera with device key
+  /api/cameras/health:
+    post:
+      summary: Submit a CameraHealth event
+      security:
+        - deviceKey: []
+      responses:
+        "202":
+          description: Camera health accepted
+  /api/incidents:
+    get:
+      summary: List incidents
+      responses:
+        "200":
+          description: Incident list
+    post:
+      summary: Submit an IncidentEvent
+      security:
+        - deviceKey: []
+      responses:
+        "201":
+          description: Incident accepted
+        "200":
+          description: Duplicate incident already accepted
+  /api/evidence/manifests:
+    get:
+      summary: List evidence manifests
+      responses:
+        "200":
+          description: Evidence manifest list
+    post:
+      summary: Submit and verify an EvidenceManifest
+      security:
+        - deviceKey: []
+      responses:
+        "201":
+          description: Evidence manifest verified
+components:
+  securitySchemes:
+    deviceKey:
+      type: apiKey
+      in: header
+      name: x-device-key

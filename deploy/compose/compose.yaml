@@ -9,3 +9,13 @@ services:
       - ../../:/app
     environment:
       PORT: "7080"
+  edge-bridge:
+    image: node:20-alpine
+    working_dir: /app
+    command: ["sh", "-c", "node edge/vision-runtime/src/simulate-tracks.mjs | node edge/analytics/src/track-bridge.mjs"]
+    depends_on:
+      - control-api
+    volumes:
+      - ../../:/app
+    environment:
+      CONTROL_API_URL: "http://control-api:7080"

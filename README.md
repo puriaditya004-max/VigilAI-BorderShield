@@ -73,6 +73,15 @@ npm run edge:simulate
 
 This foundation does not claim field readiness. It proves the production event path: registered camera -> health event -> virtual-fence incident -> evidence hash -> command API persistence -> audit log.
 
+Run the split vision-to-analytics pipeline:
+
+```bash
+npm run control-api:start
+npm run vision:simulate | npm run edge:bridge
+```
+
+Then open `http://localhost:7080/` to view cameras, incidents, evidence and audit events.
+
 ## Reuse from current VigilAI-Platform repo (commit 0690c45)
 
 Reuse with refactoring:
