@@ -35,6 +35,7 @@ try {
   assert(db.audits.some((event) => event.action === "incident.created"), "expected incident audit event");
   assert(db.audits.some((event) => event.action === "evidence.verified"), "expected evidence audit event");
   assert(fs.existsSync(evidenceDir), "expected evidence directory");
+  assert(fs.readdirSync(evidenceDir).some((file) => file.endsWith(".svg")), "expected visual evidence keyframe");
 
   console.log("PASS camera-to-incident integration");
 } finally {
@@ -58,6 +59,7 @@ function cleanupGeneratedState() {
   if (fs.existsSync(dbPath)) fs.rmSync(dbPath, { force: true });
   removeFiles(outboxDir, ".json");
   removeFiles(evidenceDir, ".txt");
+  removeFiles(evidenceDir, ".svg");
 }
 
 function collect(child, timeoutMs = 10000) {

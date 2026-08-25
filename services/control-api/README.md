@@ -17,6 +17,7 @@ Endpoints:
 - `GET /health`
 - `POST /api/cameras/register`
 - `POST /api/cameras/health`
+- `POST /api/cameras/rotate-key`
 - `GET /api/cameras`
 - `GET /api/zones`
 - `POST /api/incidents`
@@ -24,10 +25,12 @@ Endpoints:
 - `POST /api/evidence/manifests`
 - `GET /api/evidence/manifests`
 - `GET /api/audit`
+- `GET /api/metrics`
 
 Production invariants already enforced:
 
 - camera device key required for health and incident ingest
+- camera device key rotation with audit
 - `IncidentEvent` and `CameraHealth` contract validation
 - `EvidenceManifest` contract and local hash verification
 - idempotent incident creation through `Idempotency-Key`

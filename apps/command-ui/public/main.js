@@ -20,17 +20,18 @@ setInterval(refresh, 5000);
 
 async function refresh() {
   try {
-    const [health, cameras, incidents, audit, evidence] = await Promise.all([
+    const [health, cameras, incidents, audit, evidence, metrics] = await Promise.all([
       getJson("/health"),
       getJson("/api/cameras"),
       getJson("/api/incidents"),
       getJson("/api/audit"),
-      getJson("/api/evidence/manifests")
+      getJson("/api/evidence/manifests"),
+      getJson("/api/metrics")
     ]);
 
     els.apiStatus.textContent = health.status === "ok" ? "Online" : "Degraded";
     els.apiStatus.dataset.state = health.status === "ok" ? "online" : "degraded";
-    renderMetrics(cameras, incidents, audit, evidence);
+    renderMetrics(cameras, incidents, audit, evidence, metrics);
     renderIncidents(incidents);
     renderCameras(cameras);
     renderAudit(audit);
@@ -48,12 +49,12 @@ async function getJson(path) {
   return response.json();
 }
 
-function renderMetrics(cameras, incidents, audit, evidence) {
-  els.cameraCount.textContent = cameras.length;
-  els.incidentCount.textContent = incidents.filter((item) => item.status === "OPEN").length;
-  els.highCount.textContent = incidents.filter((item) => ["HIGH", "CRITICAL"].includes(item.severity)).length;
-  els.auditCount.textContent = audit.length;
-  els.evidenceCount.textContent = evidence.length;
+function renderMetrics(cameras, incidents, audit, evidence, metrics) {
+  els.cameraCount.textContent = metrics?.cameras?.total ?? cameras.length;
+  els.incidentCount.textContent = metrics?.incidents?.open ?? incidents.filter((item) => item.status === "OPEN").length;
+  els.highCount.textContent = (metrics?.incidents?.bySeverity?.HIGH || 0) + (metrics?.incidents?.bySeverity?.CRITICAL || 0);
+  els.auditCount.textContent = metrics?.audit?.total ?? audit.length;
+  els.evidenceCount.textContent = metrics?.evidence?.verified ?? evidence.length;
 }
 
 function renderIncidents(incidents) {

@@ -36,12 +36,13 @@ try {
   assert(visionResult.code === 0, `vision failed: ${visionResult.stderr}`);
   assert(bridgeResult.code === 0, `bridge failed: ${bridgeResult.stderr}`);
 
-  const [html, cameras, incidents, evidence, audit] = await Promise.all([
+  const [html, cameras, incidents, evidence, audit, metrics] = await Promise.all([
     fetchText("/"),
     fetchJson("/api/cameras"),
     fetchJson("/api/incidents"),
     fetchJson("/api/evidence/manifests"),
-    fetchJson("/api/audit")
+    fetchJson("/api/audit"),
+    fetchJson("/api/metrics")
   ]);
 
   assert(html.includes("VigilAI BorderShield"), "command UI should render");
@@ -51,7 +52,9 @@ try {
   assert(audit.some((event) => event.action === "camera.registered"), "camera audit missing");
   assert(audit.some((event) => event.action === "incident.created"), "incident audit missing");
   assert(audit.some((event) => event.action === "evidence.verified"), "evidence audit missing");
-  assert(listFiles(evidenceDir, ".txt").length >= 1, "evidence artifact missing");
+  assert(metrics.incidents.open === 1, "metrics should report one open incident");
+  assert(metrics.evidence.verified === 1, "metrics should report one verified evidence manifest");
+  assert(listFiles(evidenceDir, ".svg").length >= 1, "evidence artifact missing");
   assert(listFiles(outboxDir, ".json").length === 0, "outbox should be empty after online sync");
 
   console.log("PASS full-pipeline e2e");
@@ -107,6 +110,7 @@ function cleanup() {
   if (fs.existsSync(dbPath)) fs.rmSync(dbPath, { force: true });
   for (const file of listFiles(outboxDir, ".json")) fs.rmSync(file, { force: true });
   for (const file of listFiles(evidenceDir, ".txt")) fs.rmSync(file, { force: true });
+  for (const file of listFiles(evidenceDir, ".svg")) fs.rmSync(file, { force: true });
 }
 
 function listFiles(dir, extension) {

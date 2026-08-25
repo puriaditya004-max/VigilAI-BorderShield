@@ -43,6 +43,10 @@ const server = http.createServer(async (req, res) => {
       return updateCameraHealth(req, res, await readJsonBody(req));
     }
 
+    if (req.method === "POST" && url.pathname === "/api/cameras/rotate-key") {
+      return rotateCameraKey(req, res, await readJsonBody(req));
+    }
+
     if (req.method === "GET" && url.pathname === "/api/cameras") {
       return sendJson(res, 200, readDb().cameras);
     }
@@ -69,6 +73,10 @@ const server = http.createServer(async (req, res) => {
 
     if (req.method === "GET" && url.pathname === "/api/audit") {
       return sendJson(res, 200, readDb().audits.slice().reverse());
+    }
+
+    if (req.method === "GET" && url.pathname === "/api/metrics") {
+      return sendJson(res, 200, buildMetrics(readDb()));
     }
 
     return notFound(res);
@@ -133,6 +141,21 @@ function updateCameraHealth(req, res, body) {
   });
 
   return sendJson(res, 202, result);
+}
+
+function rotateCameraKey(req, res, body) {
+  const auth = authenticateCamera(req, body.cameraId);
+  if (!auth.ok) return unauthorized(res, auth.message);
+
+  const result = updateDb((db) => {
+    const camera = db.cameras.find((item) => item.cameraId === body.cameraId);
+    camera.deviceKey = `dev_${crypto.randomBytes(24).toString("hex")}`;
+    camera.keyRotatedAt = new Date().toISOString();
+    appendAudit(db, { actor: body.cameraId, action: "camera.key_rotated", resource: body.cameraId, requestId: req.headers["idempotency-key"] });
+    return camera;
+  });
+
+  return sendJson(res, 200, result);
 }
 
 function createIncident(req, res, body) {
@@ -214,4 +237,31 @@ function serveStaticUi(res, pathname) {
 
   res.writeHead(200, { "content-type": contentType });
   res.end(fs.readFileSync(filePath));
+}
+
+function buildMetrics(db) {
+  const incidentsBySeverity = db.incidents.reduce((acc, incident) => {
+    acc[incident.severity] = (acc[incident.severity] || 0) + 1;
+    return acc;
+  }, {});
+
+  return {
+    schemaVersion: "control-metrics.v1",
+    generatedAt: new Date().toISOString(),
+    cameras: {
+      total: db.cameras.length,
+      online: db.cameras.filter((camera) => camera.status === "ONLINE").length
+    },
+    incidents: {
+      total: db.incidents.length,
+      open: db.incidents.filter((incident) => incident.status === "OPEN").length,
+      bySeverity: incidentsBySeverity
+    },
+    evidence: {
+      verified: db.evidence.filter((item) => item.status === "VERIFIED").length
+    },
+    audit: {
+      total: db.audits.length
+    }
+  };
 }

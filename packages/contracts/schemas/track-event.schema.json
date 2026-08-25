@@ -38,6 +38,15 @@
       }
     },
     "captureTime": { "type": "string", "format": "date-time" },
+    "frame": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["uri", "sha256"],
+      "properties": {
+        "uri": { "type": "string" },
+        "sha256": { "type": "string", "pattern": "^[a-f0-9]{64}$" }
+      }
+    },
     "model": {
       "type": "object",
       "additionalProperties": false,

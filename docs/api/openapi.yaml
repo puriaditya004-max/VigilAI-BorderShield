@@ -26,6 +26,14 @@ paths:
       responses:
         "202":
           description: Camera health accepted
+  /api/cameras/rotate-key:
+    post:
+      summary: Rotate a camera device key
+      security:
+        - deviceKey: []
+      responses:
+        "200":
+          description: New device key issued
   /api/incidents:
     get:
       summary: List incidents
@@ -54,6 +62,12 @@ paths:
       responses:
         "201":
           description: Evidence manifest verified
+  /api/metrics:
+    get:
+      summary: Operational metrics snapshot
+      responses:
+        "200":
+          description: Metrics snapshot
 components:
   securitySchemes:
     deviceKey:
