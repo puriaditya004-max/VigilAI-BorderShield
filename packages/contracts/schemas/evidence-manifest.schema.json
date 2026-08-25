@@ -1,0 +1,29 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://vigilai.local/contracts/evidence-manifest.schema.json",
+  "title": "EvidenceManifest",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "manifestId", "incidentId", "createdAt", "assets", "sha256"],
+  "properties": {
+    "schemaVersion": { "const": "evidence-manifest.v1" },
+    "manifestId": { "type": "string", "minLength": 8 },
+    "incidentId": { "type": "string", "minLength": 8 },
+    "createdAt": { "type": "string", "format": "date-time" },
+    "assets": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["kind", "uri", "sha256"],
+        "properties": {
+          "kind": { "enum": ["KEYFRAME", "CLIP", "ANNOTATION"] },
+          "uri": { "type": "string" },
+          "sha256": { "type": "string", "pattern": "^[a-f0-9]{64}$" }
+        }
+      }
+    },
+    "sha256": { "type": "string", "pattern": "^[a-f0-9]{64}$" }
+  }
+}

@@ -1,0 +1,11 @@
+services:
+  control-api:
+    image: node:20-alpine
+    working_dir: /app
+    command: ["node", "services/control-api/src/server.mjs"]
+    ports:
+      - "7080:7080"
+    volumes:
+      - ../../:/app
+    environment:
+      PORT: "7080"

@@ -1,0 +1,17 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://vigilai.local/contracts/audit-event.schema.json",
+  "title": "AuditEvent",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "auditId", "actor", "action", "resource", "createdAt"],
+  "properties": {
+    "schemaVersion": { "const": "audit-event.v1" },
+    "auditId": { "type": "string", "minLength": 8 },
+    "actor": { "type": "string", "minLength": 2 },
+    "action": { "type": "string", "minLength": 2 },
+    "resource": { "type": "string", "minLength": 2 },
+    "requestId": { "type": "string" },
+    "createdAt": { "type": "string", "format": "date-time" }
+  }
+}

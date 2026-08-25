@@ -1,0 +1,17 @@
+{
+  "schemaVersion": "incident-event.v1",
+  "eventId": "evt_incident_0001",
+  "incidentId": "inc-bop-0001",
+  "cameraId": "cam-bop-01-east",
+  "zoneId": "zone-east-fence",
+  "type": "VIRTUAL_FENCE_INTRUSION",
+  "severity": "HIGH",
+  "reasonCodes": ["TRACK_CROSSED_RESTRICTED_LINE", "PERSISTENCE_CONFIRMED"],
+  "captureTime": "2026-08-25T16:30:02.000Z",
+  "evidence": {
+    "manifestId": "manifest-inc-bop-0001",
+    "sha256": "8843d7f92416211de9ebb963ff4ce28125932878d0f560877c8fd78ea61ccf2b",
+    "keyframeUri": "file://evidence/inc-bop-0001-keyframe.txt",
+    "clipUri": "file://evidence/inc-bop-0001-clip.txt"
+  }
+}

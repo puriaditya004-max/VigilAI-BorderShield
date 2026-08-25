@@ -1,0 +1,19 @@
+{
+  "schemaVersion": "camera-health.v1",
+  "eventId": "evt_camera_health_0001",
+  "cameraId": "cam-bop-01-east",
+  "edgeNodeId": "edge-bop-01",
+  "status": "ONLINE",
+  "captureTime": "2026-08-25T16:30:00.000Z",
+  "ingestTime": "2026-08-25T16:30:00.120Z",
+  "stream": {
+    "uri": "rtsp://camera.local/stream1",
+    "codec": "H264",
+    "fps": 25
+  },
+  "quality": {
+    "blurScore": 0.12,
+    "darknessScore": 0.18,
+    "droppedFrames": 0
+  }
+}

@@ -1,0 +1,38 @@
+# Node
+node_modules/
+dist/
+build/
+.next/
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+*.egg-info/
+
+# ML / data
+*.pt
+*.onnx
+*.engine
+ml/datasets/raw/
+ml/training/runs/
+mlruns/
+
+# Docker / infra
+.env
+.env.*
+*.log
+
+# Generated local runtime state
+services/control-api/data/*.json
+edge/edge-agent/outbox/*.json
+edge/edge-agent/data/evidence/*
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db

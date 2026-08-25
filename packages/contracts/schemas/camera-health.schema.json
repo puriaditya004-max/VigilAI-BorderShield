@@ -1,0 +1,36 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://vigilai.local/contracts/camera-health.schema.json",
+  "title": "CameraHealth",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "eventId", "cameraId", "edgeNodeId", "status", "captureTime", "ingestTime"],
+  "properties": {
+    "schemaVersion": { "const": "camera-health.v1" },
+    "eventId": { "type": "string", "minLength": 12 },
+    "cameraId": { "type": "string", "minLength": 3 },
+    "edgeNodeId": { "type": "string", "minLength": 3 },
+    "status": { "enum": ["ONLINE", "DEGRADED", "OFFLINE"] },
+    "captureTime": { "type": "string", "format": "date-time" },
+    "ingestTime": { "type": "string", "format": "date-time" },
+    "stream": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["uri", "codec", "fps"],
+      "properties": {
+        "uri": { "type": "string" },
+        "codec": { "type": "string" },
+        "fps": { "type": "number", "minimum": 0 }
+      }
+    },
+    "quality": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "blurScore": { "type": "number", "minimum": 0 },
+        "darknessScore": { "type": "number", "minimum": 0 },
+        "droppedFrames": { "type": "integer", "minimum": 0 }
+      }
+    }
+  }
+}

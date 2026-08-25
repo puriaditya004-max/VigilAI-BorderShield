@@ -1,0 +1,9 @@
+{
+  "schemaVersion": "audit-event.v1",
+  "auditId": "aud-inc-bop-0001",
+  "actor": "edge-bop-01",
+  "action": "incident.created",
+  "resource": "inc-bop-0001",
+  "requestId": "req-edge-sync-0001",
+  "createdAt": "2026-08-25T16:30:02.150Z"
+}

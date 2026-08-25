@@ -1,0 +1,17 @@
+{
+  "name": "vigilai-bordershield",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Production-grade foundation for offline-first border video intelligence.",
+  "type": "module",
+  "scripts": {
+    "contracts:test": "node tests/contract/validate-samples.mjs",
+    "control-api:start": "node services/control-api/src/server.mjs",
+    "edge:simulate": "node edge/analytics/src/simulate-fence.mjs",
+    "integration:test": "node tests/integration/camera-to-incident.mjs",
+    "test": "npm run contracts:test && npm run integration:test"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

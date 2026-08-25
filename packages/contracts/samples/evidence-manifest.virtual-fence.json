@@ -1,0 +1,14 @@
+{
+  "schemaVersion": "evidence-manifest.v1",
+  "manifestId": "manifest-inc-bop-0001",
+  "incidentId": "inc-bop-0001",
+  "createdAt": "2026-08-25T16:30:02.100Z",
+  "assets": [
+    {
+      "kind": "KEYFRAME",
+      "uri": "file://evidence/inc-bop-0001-keyframe.txt",
+      "sha256": "8843d7f92416211de9ebb963ff4ce28125932878d0f560877c8fd78ea61ccf2b"
+    }
+  ],
+  "sha256": "bdf0e70e9f6f65f3cf23b8830c47a24c2637f8fe7f6580a0ec413789a7a1a7a8"
+}

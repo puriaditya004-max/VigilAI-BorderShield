@@ -1,0 +1,52 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://vigilai.local/contracts/track-event.schema.json",
+  "title": "TrackEvent",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "eventId", "cameraId", "trackId", "objectClass", "confidence", "bbox", "trajectory", "captureTime", "model"],
+  "properties": {
+    "schemaVersion": { "const": "track-event.v1" },
+    "eventId": { "type": "string", "minLength": 12 },
+    "cameraId": { "type": "string", "minLength": 3 },
+    "trackId": { "type": "string", "minLength": 1 },
+    "objectClass": { "enum": ["PERSON", "VEHICLE"] },
+    "confidence": { "type": "number", "minimum": 0, "maximum": 1 },
+    "bbox": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["x", "y", "width", "height"],
+      "properties": {
+        "x": { "type": "number", "minimum": 0 },
+        "y": { "type": "number", "minimum": 0 },
+        "width": { "type": "number", "exclusiveMinimum": 0 },
+        "height": { "type": "number", "exclusiveMinimum": 0 }
+      }
+    },
+    "trajectory": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["x", "y", "t"],
+        "properties": {
+          "x": { "type": "number" },
+          "y": { "type": "number" },
+          "t": { "type": "string", "format": "date-time" }
+        }
+      }
+    },
+    "captureTime": { "type": "string", "format": "date-time" },
+    "model": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "version", "checksum"],
+      "properties": {
+        "name": { "type": "string" },
+        "version": { "type": "string" },
+        "checksum": { "type": "string" }
+      }
+    }
+  }
+}

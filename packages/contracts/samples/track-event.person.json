@@ -1,0 +1,32 @@
+{
+  "schemaVersion": "track-event.v1",
+  "eventId": "evt_track_0001",
+  "cameraId": "cam-bop-01-east",
+  "trackId": "trk-42",
+  "objectClass": "PERSON",
+  "confidence": 0.91,
+  "bbox": {
+    "x": 618,
+    "y": 215,
+    "width": 74,
+    "height": 181
+  },
+  "trajectory": [
+    {
+      "x": 623,
+      "y": 330,
+      "t": "2026-08-25T16:30:01.000Z"
+    },
+    {
+      "x": 661,
+      "y": 333,
+      "t": "2026-08-25T16:30:02.000Z"
+    }
+  ],
+  "captureTime": "2026-08-25T16:30:02.000Z",
+  "model": {
+    "name": "yolo-family-person-vehicle",
+    "version": "0.1.0-demo",
+    "checksum": "sha256:unverified-development-artifact"
+  }
+}
