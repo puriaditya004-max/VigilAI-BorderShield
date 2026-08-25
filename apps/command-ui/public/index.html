@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>VigilAI BorderShield Command</title>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <main class="shell">
+      <header class="topbar">
+        <div>
+          <h1>VigilAI BorderShield</h1>
+          <p>Edge-to-command incident monitor</p>
+        </div>
+        <button id="refreshButton" type="button">Refresh</button>
+      </header>
+
+      <section class="metrics" aria-label="Operational summary">
+        <article>
+          <span>Cameras</span>
+          <strong id="cameraCount">0</strong>
+        </article>
+        <article>
+          <span>Open Incidents</span>
+          <strong id="incidentCount">0</strong>
+        </article>
+        <article>
+          <span>High/Critical</span>
+          <strong id="highCount">0</strong>
+        </article>
+        <article>
+          <span>Audit Events</span>
+          <strong id="auditCount">0</strong>
+        </article>
+      </section>
+
+      <section class="layout">
+        <article class="panel">
+          <div class="panel-header">
+            <h2>Incident Feed</h2>
+            <span id="apiStatus" class="status">Connecting</span>
+          </div>
+          <div id="incidentList" class="list"></div>
+        </article>
+
+        <aside class="side">
+          <article class="panel">
+            <h2>Cameras</h2>
+            <div id="cameraList" class="list compact"></div>
+          </article>
+          <article class="panel">
+            <h2>Audit</h2>
+            <div id="auditList" class="list compact"></div>
+          </article>
+        </aside>
+      </section>
+    </main>
+    <script type="module" src="./main.js"></script>
+  </body>
+</html>

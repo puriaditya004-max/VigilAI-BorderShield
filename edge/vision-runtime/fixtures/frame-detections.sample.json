@@ -1,0 +1,20 @@
+{
+  "cameraId": "cam-bop-01-east",
+  "frameTime": "2026-08-25T16:30:02.000Z",
+  "detections": [
+    {
+      "classId": 0,
+      "className": "person",
+      "confidence": 0.93,
+      "trackId": "trk-person-001",
+      "bbox": [632, 213, 704, 399]
+    },
+    {
+      "classId": 2,
+      "className": "car",
+      "confidence": 0.86,
+      "trackId": "trk-vehicle-002",
+      "bbox": [220, 310, 360, 390]
+    }
+  ]
+}

@@ -1,6 +1,7 @@
 import { buildIntrusionIncident, crossedFence } from "./virtual-fence.mjs";
 import { createTextEvidence } from "./evidence.mjs";
 import { enqueueIncident, replayOutbox } from "../../edge-agent/src/outbox.mjs";
+import { buildSimulatedTrackEvents } from "../../vision-runtime/src/simulate-tracks.mjs";
 
 const API_BASE = process.env.CONTROL_API_URL || "http://localhost:7080";
 const CAMERA_ID = "cam-bop-01-east";
@@ -23,30 +24,13 @@ const zone = {
   severity: "HIGH"
 };
 
-const trackEvent = {
-  schemaVersion: "track-event.v1",
-  eventId: "evt-track-sim-0001",
-  cameraId: CAMERA_ID,
-  trackId: "trk-person-001",
-  objectClass: "PERSON",
-  confidence: 0.93,
-  bbox: { x: 662, y: 240, width: 72, height: 184 },
-  trajectory: [
-    { x: 600, y: 330, t: new Date(Date.now() - 2000).toISOString() },
-    { x: 620, y: 332, t: new Date(Date.now() - 1000).toISOString() },
-    { x: 666, y: 335, t: new Date().toISOString() }
-  ],
-  captureTime: new Date().toISOString(),
-  model: {
-    name: "simulated-person-vehicle-tracker",
-    version: "0.1.0",
-    checksum: "sha256:simulation"
-  }
-};
-
 async function main() {
   const camera = await registerCamera();
   await sendHealth(camera.deviceKey);
+
+  const trackEvent = buildSimulatedTrackEvents({ cameraId: CAMERA_ID })
+    .filter((event) => event.objectClass === "PERSON")
+    .at(-1);
 
   if (!crossedFence(trackEvent.trajectory, zone)) {
     console.log("No intrusion generated.");

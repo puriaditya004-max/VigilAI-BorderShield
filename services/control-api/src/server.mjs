@@ -1,4 +1,5 @@
 import crypto from "node:crypto";
+import fs from "node:fs";
 import http from "node:http";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -9,6 +10,7 @@ import { badRequest, notFound, readJsonBody, sendJson, unauthorized } from "./ht
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const root = path.resolve(__dirname, "../../..");
 const PORT = Number(process.env.PORT || 7080);
+const uiDir = path.join(root, "apps/command-ui/public");
 
 const schemas = {
   incident: readJson(path.join(root, "packages/contracts/schemas/incident-event.schema.json")),
@@ -22,6 +24,10 @@ const server = http.createServer(async (req, res) => {
     if (req.method === "OPTIONS") return sendJson(res, 204, {});
 
     const url = new URL(req.url, `http://${req.headers.host}`);
+
+    if (req.method === "GET" && (url.pathname === "/" || url.pathname.startsWith("/assets/") || ["/main.js", "/styles.css"].includes(url.pathname))) {
+      return serveStaticUi(res, url.pathname);
+    }
 
     if (req.method === "GET" && url.pathname === "/health") {
       return sendJson(res, 200, { status: "ok", service: "control-api", time: new Date().toISOString() });
@@ -154,4 +160,19 @@ function authenticateCamera(req, cameraId) {
   if (!camera) return { ok: false, message: "camera is not registered" };
   if (camera.deviceKey !== deviceKey) return { ok: false, message: "device key mismatch" };
   return { ok: true, camera };
+}
+
+function serveStaticUi(res, pathname) {
+  const fileName = pathname === "/" ? "index.html" : pathname.slice(1);
+  const filePath = path.join(uiDir, fileName);
+  if (!filePath.startsWith(uiDir) || !fs.existsSync(filePath)) return notFound(res);
+
+  const ext = path.extname(filePath);
+  const contentType = ext === ".html" ? "text/html; charset=utf-8"
+    : ext === ".js" ? "text/javascript; charset=utf-8"
+      : ext === ".css" ? "text/css; charset=utf-8"
+        : "application/octet-stream";
+
+  res.writeHead(200, { "content-type": contentType });
+  res.end(fs.readFileSync(filePath));
 }

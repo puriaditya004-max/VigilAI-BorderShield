@@ -7,9 +7,12 @@
   "scripts": {
     "contracts:test": "node tests/contract/validate-samples.mjs",
     "control-api:start": "node services/control-api/src/server.mjs",
+    "vision:simulate": "node edge/vision-runtime/src/simulate-tracks.mjs",
     "edge:simulate": "node edge/analytics/src/simulate-fence.mjs",
-    "integration:test": "node tests/integration/camera-to-incident.mjs",
-    "test": "npm run contracts:test && npm run integration:test"
+    "command-ui:start": "node services/control-api/src/server.mjs",
+    "unit:test": "node tests/unit/vision-runtime.test.mjs",
+    "integration:test": "node tests/integration/camera-to-incident.mjs && node tests/integration/offline-outbox-replay.mjs",
+    "test": "npm run contracts:test && npm run unit:test && npm run integration:test"
   },
   "engines": {
     "node": ">=20"
