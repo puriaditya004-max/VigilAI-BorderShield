@@ -22,8 +22,18 @@ export async function runTrackBridge({ input = process.stdin, endpoint = API_BAS
   const reader = readline.createInterface({ input, crlfDelay: Infinity });
 
   for await (const line of reader) {
-    if (!line.trim()) continue;
-    const trackEvent = JSON.parse(line);
+    const trimmed = line.trim();
+    if (!trimmed || !trimmed.startsWith("{")) continue;
+
+    let trackEvent;
+    try {
+      trackEvent = JSON.parse(trimmed);
+    } catch (error) {
+      console.error(`Skipping invalid TrackEvent line: ${error.message}`);
+      continue;
+    }
+
+    if (trackEvent.schemaVersion !== "track-event.v1") continue;
     const matchingZones = zones.filter((zone) => zone.cameraId === trackEvent.cameraId);
 
     for (const zone of matchingZones) {

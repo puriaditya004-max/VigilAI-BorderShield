@@ -13,7 +13,7 @@ npm run control-api:start
 2. In another terminal, generate simulated `TrackEvent` payloads and pipe them into analytics:
 
 ```bash
-npm run vision:simulate | npm run edge:bridge
+npm run --silent vision:simulate | npm run --silent edge:bridge
 ```
 
 3. Open:

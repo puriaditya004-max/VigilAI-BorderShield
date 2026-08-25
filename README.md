@@ -83,7 +83,7 @@ Run the split vision-to-analytics pipeline:
 
 ```bash
 npm run control-api:start
-npm run vision:simulate | npm run edge:bridge
+npm run --silent vision:simulate | npm run --silent edge:bridge
 ```
 
 Then open `http://localhost:7080/` to view cameras, incidents, evidence and audit events.
