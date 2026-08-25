@@ -4,6 +4,7 @@ import http from "node:http";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { validateContract, readJson } from "../../../packages/contracts/src/validate-contract.mjs";
+import { verifyEvidenceManifest } from "../../evidence-service/src/manifest.mjs";
 import { appendAudit, ensureStore, readDb, updateDb } from "./store.mjs";
 import { badRequest, notFound, readJsonBody, sendJson, unauthorized } from "./http.mjs";
 
@@ -14,7 +15,8 @@ const uiDir = path.join(root, "apps/command-ui/public");
 
 const schemas = {
   incident: readJson(path.join(root, "packages/contracts/schemas/incident-event.schema.json")),
-  cameraHealth: readJson(path.join(root, "packages/contracts/schemas/camera-health.schema.json"))
+  cameraHealth: readJson(path.join(root, "packages/contracts/schemas/camera-health.schema.json")),
+  evidence: readJson(path.join(root, "packages/contracts/schemas/evidence-manifest.schema.json"))
 };
 
 ensureStore();
@@ -55,6 +57,14 @@ const server = http.createServer(async (req, res) => {
 
     if (req.method === "GET" && url.pathname === "/api/incidents") {
       return sendJson(res, 200, readDb().incidents.slice().reverse());
+    }
+
+    if (req.method === "POST" && url.pathname === "/api/evidence/manifests") {
+      return createEvidenceManifest(req, res, await readJsonBody(req));
+    }
+
+    if (req.method === "GET" && url.pathname === "/api/evidence/manifests") {
+      return sendJson(res, 200, readDb().evidence.slice().reverse());
     }
 
     if (req.method === "GET" && url.pathname === "/api/audit") {
@@ -149,6 +159,35 @@ function createIncident(req, res, body) {
   });
 
   return sendJson(res, result.created ? 201 : 200, result.incident);
+}
+
+function createEvidenceManifest(req, res, body) {
+  const incident = readDb().incidents.find((item) => item.incidentId === body.incidentId);
+  const cameraId = incident?.cameraId || req.headers["x-camera-id"];
+  const auth = authenticateCamera(req, cameraId);
+  if (!auth.ok) return unauthorized(res, auth.message);
+
+  const validation = validateContract(schemas.evidence, body, "EvidenceManifest");
+  if (!validation.valid) return badRequest(res, "EvidenceManifest contract failed", validation.errors);
+
+  const evidenceCheck = verifyEvidenceManifest(body);
+  if (!evidenceCheck.valid) return badRequest(res, "EvidenceManifest verification failed", evidenceCheck.errors);
+
+  const result = updateDb((db) => {
+    const existing = db.evidence.find((item) => item.manifestId === body.manifestId);
+    if (existing) return { manifest: existing, created: false };
+
+    const manifest = {
+      ...body,
+      receivedAt: new Date().toISOString(),
+      status: "VERIFIED"
+    };
+    db.evidence.push(manifest);
+    appendAudit(db, { actor: cameraId, action: "evidence.verified", resource: body.manifestId, requestId: req.headers["idempotency-key"] });
+    return { manifest, created: true };
+  });
+
+  return sendJson(res, result.created ? 201 : 200, result.manifest);
 }
 
 function authenticateCamera(req, cameraId) {

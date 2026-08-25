@@ -30,8 +30,10 @@ try {
   const db = JSON.parse(fs.readFileSync(dbPath, "utf8"));
   assert(db.cameras.length === 1, "expected one registered camera");
   assert(db.incidents.length === 1, "expected one incident");
+  assert(db.evidence.length === 1, "expected one evidence manifest");
   assert(db.incidents[0].type === "VIRTUAL_FENCE_INTRUSION", "expected virtual fence incident");
   assert(db.audits.some((event) => event.action === "incident.created"), "expected incident audit event");
+  assert(db.audits.some((event) => event.action === "evidence.verified"), "expected evidence audit event");
   assert(fs.existsSync(evidenceDir), "expected evidence directory");
 
   console.log("PASS camera-to-incident integration");

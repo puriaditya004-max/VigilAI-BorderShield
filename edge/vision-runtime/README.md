@@ -17,3 +17,12 @@ node edge/vision-runtime/src/simulate-tracks.mjs
 ```
 
 Next production step is replacing the simulator input with real OpenCV + Ultralytics/ONNX inference while keeping the same `TrackEvent` adapter boundary.
+
+Python runtime scaffold:
+
+```bash
+python edge/vision-runtime/python/yolo_track_runtime.py --source 0
+python edge/vision-runtime/python/yolo_track_runtime.py --source rtsp://camera/stream1
+```
+
+It follows the VigilAI reference pattern: OpenCV source -> YOLO `model.track()` -> person/vehicle `TrackEvent` JSON lines. Install `ultralytics` and `opencv-python` before running it against a real camera/video.

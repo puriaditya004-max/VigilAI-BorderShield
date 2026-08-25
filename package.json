@@ -10,7 +10,7 @@
     "vision:simulate": "node edge/vision-runtime/src/simulate-tracks.mjs",
     "edge:simulate": "node edge/analytics/src/simulate-fence.mjs",
     "command-ui:start": "node services/control-api/src/server.mjs",
-    "unit:test": "node tests/unit/vision-runtime.test.mjs",
+    "unit:test": "node tests/unit/vision-runtime.test.mjs && node tests/unit/evidence-service.test.mjs",
     "integration:test": "node tests/integration/camera-to-incident.mjs && node tests/integration/offline-outbox-replay.mjs",
     "test": "npm run contracts:test && npm run unit:test && npm run integration:test"
   },

@@ -47,6 +47,7 @@ async function main() {
     return;
   }
 
+  await sendEvidence(evidence, camera.deviceKey, incident.cameraId);
   const replayed = await replayOutbox({ endpoint: API_BASE, deviceKey: camera.deviceKey });
   console.log(`Incident accepted: ${incident.incidentId}`);
   console.log(`Outbox replay results: ${JSON.stringify(replayed)}`);
@@ -101,6 +102,27 @@ async function sendIncident(incident, deviceKey) {
   } catch {
     return false;
   }
+}
+
+async function sendEvidence(evidence, deviceKey, cameraId) {
+  const response = await fetch(`${API_BASE}/api/evidence/manifests`, {
+    method: "POST",
+    headers: {
+      "content-type": "application/json",
+      "x-device-key": deviceKey,
+      "x-camera-id": cameraId,
+      "idempotency-key": evidence.manifestId
+    },
+    body: JSON.stringify({
+      schemaVersion: evidence.schemaVersion,
+      manifestId: evidence.manifestId,
+      incidentId: evidence.incidentId,
+      createdAt: evidence.createdAt,
+      assets: evidence.assets,
+      sha256: evidence.sha256
+    })
+  });
+  if (!response.ok) throw new Error(`evidence manifest failed: ${response.status}`);
 }
 
 main().catch((error) => {

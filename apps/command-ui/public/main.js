@@ -7,9 +7,11 @@ const els = {
   incidentCount: document.querySelector("#incidentCount"),
   highCount: document.querySelector("#highCount"),
   auditCount: document.querySelector("#auditCount"),
+  evidenceCount: document.querySelector("#evidenceCount"),
   incidentList: document.querySelector("#incidentList"),
   cameraList: document.querySelector("#cameraList"),
-  auditList: document.querySelector("#auditList")
+  auditList: document.querySelector("#auditList"),
+  evidenceList: document.querySelector("#evidenceList")
 };
 
 els.refreshButton.addEventListener("click", refresh);
@@ -18,19 +20,21 @@ setInterval(refresh, 5000);
 
 async function refresh() {
   try {
-    const [health, cameras, incidents, audit] = await Promise.all([
+    const [health, cameras, incidents, audit, evidence] = await Promise.all([
       getJson("/health"),
       getJson("/api/cameras"),
       getJson("/api/incidents"),
-      getJson("/api/audit")
+      getJson("/api/audit"),
+      getJson("/api/evidence/manifests")
     ]);
 
     els.apiStatus.textContent = health.status === "ok" ? "Online" : "Degraded";
     els.apiStatus.dataset.state = health.status === "ok" ? "online" : "degraded";
-    renderMetrics(cameras, incidents, audit);
+    renderMetrics(cameras, incidents, audit, evidence);
     renderIncidents(incidents);
     renderCameras(cameras);
     renderAudit(audit);
+    renderEvidence(evidence);
   } catch (error) {
     els.apiStatus.textContent = "Offline";
     els.apiStatus.dataset.state = "offline";
@@ -44,11 +48,12 @@ async function getJson(path) {
   return response.json();
 }
 
-function renderMetrics(cameras, incidents, audit) {
+function renderMetrics(cameras, incidents, audit, evidence) {
   els.cameraCount.textContent = cameras.length;
   els.incidentCount.textContent = incidents.filter((item) => item.status === "OPEN").length;
   els.highCount.textContent = incidents.filter((item) => ["HIGH", "CRITICAL"].includes(item.severity)).length;
   els.auditCount.textContent = audit.length;
+  els.evidenceCount.textContent = evidence.length;
 }
 
 function renderIncidents(incidents) {
@@ -91,6 +96,15 @@ function renderAudit(audit) {
       <span>${escapeHtml(event.resource)} / ${formatTime(event.createdAt)}</span>
     </article>
   `).join("") : `<div class="empty">No audit events.</div>`;
+}
+
+function renderEvidence(evidence) {
+  els.evidenceList.innerHTML = evidence.length ? evidence.slice(0, 8).map((manifest) => `
+    <article class="row">
+      <strong>${escapeHtml(manifest.status)} / ${escapeHtml(manifest.manifestId)}</strong>
+      <span>${escapeHtml(manifest.incidentId)} / ${escapeHtml(manifest.sha256.slice(0, 18))}...</span>
+    </article>
+  `).join("") : `<div class="empty">No evidence manifests.</div>`;
 }
 
 function formatTime(value) {
