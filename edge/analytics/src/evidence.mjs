@@ -2,13 +2,11 @@ import crypto from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 
-const EVIDENCE_DIR = path.resolve("edge/edge-agent/data/evidence");
-
 export function createTextEvidence({ incidentHint, trackEvent, zone }) {
-  fs.mkdirSync(EVIDENCE_DIR, { recursive: true });
+  fs.mkdirSync(evidenceDir(), { recursive: true });
 
   const keyframeName = `${incidentHint}-keyframe.svg`;
-  const keyframePath = path.join(EVIDENCE_DIR, keyframeName);
+  const keyframePath = path.join(evidenceDir(), keyframeName);
   const content = buildEvidenceSvg({ trackEvent, zone });
 
   fs.writeFileSync(keyframePath, content);
@@ -61,4 +59,8 @@ function escapeXml(value) {
     .replaceAll(">", "&gt;")
     .replaceAll('"', "&quot;")
     .replaceAll("'", "&apos;");
+}
+
+function evidenceDir() {
+  return path.resolve(process.env.EVIDENCE_DIR || "edge/edge-agent/data/evidence");
 }

@@ -1,24 +1,22 @@
 import fs from "node:fs";
 import path from "node:path";
 
-const OUTBOX_DIR = path.resolve("edge/edge-agent/outbox");
-
 export function ensureOutbox() {
-  fs.mkdirSync(OUTBOX_DIR, { recursive: true });
+  fs.mkdirSync(outboxDir(), { recursive: true });
 }
 
 export function enqueueIncident(incident) {
   ensureOutbox();
-  const file = path.join(OUTBOX_DIR, `${incident.eventId}.json`);
+  const file = path.join(outboxDir(), `${incident.eventId}.json`);
   fs.writeFileSync(file, `${JSON.stringify(incident, null, 2)}\n`);
   return file;
 }
 
 export function listQueuedIncidents() {
   ensureOutbox();
-  return fs.readdirSync(OUTBOX_DIR)
+  return fs.readdirSync(outboxDir())
     .filter((file) => file.endsWith(".json"))
-    .map((file) => path.join(OUTBOX_DIR, file));
+    .map((file) => path.join(outboxDir(), file));
 }
 
 export async function replayOutbox({ endpoint, deviceKey }) {
@@ -46,4 +44,8 @@ export async function replayOutbox({ endpoint, deviceKey }) {
   }
 
   return results;
+}
+
+function outboxDir() {
+  return path.resolve(process.env.EDGE_OUTBOX_DIR || "edge/edge-agent/outbox");
 }

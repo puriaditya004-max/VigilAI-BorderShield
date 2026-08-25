@@ -1,10 +1,14 @@
-import fs from "node:fs";
-import path from "node:path";
-import { spawn } from "node:child_process";
+import {
+  cleanupRuntime,
+  createRuntimeContext,
+  getFreePort,
+  startControlApi,
+  stopProcess
+} from "../helpers/runtime.mjs";
 
-const root = path.resolve(".");
-const dbPath = path.join(root, "services/control-api/data/control-api.db.json");
-const port = 7280;
+const root = process.cwd();
+const ctx = createRuntimeContext("device-key");
+const port = await getFreePort();
 const endpoint = `http://localhost:${port}`;
 const camera = {
   cameraId: "cam-bop-01-east",
@@ -14,16 +18,9 @@ const camera = {
   streamUri: "rtsp://camera.local/stream1"
 };
 
-if (fs.existsSync(dbPath)) fs.rmSync(dbPath, { force: true });
-
-const server = spawn(process.execPath, ["services/control-api/src/server.mjs"], {
-  cwd: root,
-  env: { ...process.env, PORT: String(port) },
-  stdio: ["ignore", "pipe", "pipe"]
-});
-
+let server;
 try {
-  await waitForHealth();
+  server = await startControlApi({ cwd: root, port, env: ctx.env });
   const registered = await postJson("/api/cameras/register", camera, {});
   const oldKey = registered.deviceKey;
   const rotated = await postJson("/api/cameras/rotate-key", { cameraId: camera.cameraId }, { "x-device-key": oldKey });
@@ -48,7 +45,8 @@ try {
   assert(audit.some((event) => event.action === "camera.key_rotated"), "rotation audit missing");
   console.log("PASS device-key-rotation integration");
 } finally {
-  server.kill();
+  await stopProcess(server);
+  cleanupRuntime(ctx);
 }
 
 function healthPayload() {
@@ -80,19 +78,6 @@ async function fetchJson(route) {
   const response = await fetch(`${endpoint}${route}`);
   if (!response.ok) throw new Error(`${route} failed with ${response.status}`);
   return response.json();
-}
-
-async function waitForHealth() {
-  const started = Date.now();
-  while (Date.now() - started < 5000) {
-    try {
-      const response = await fetch(`${endpoint}/health`);
-      if (response.ok) return;
-    } catch {
-      await new Promise((resolve) => setTimeout(resolve, 100));
-    }
-  }
-  throw new Error("control-api did not start");
 }
 
 function assert(condition, message) {

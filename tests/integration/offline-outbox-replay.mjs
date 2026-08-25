@@ -1,11 +1,19 @@
 import fs from "node:fs";
-import path from "node:path";
-import { spawn } from "node:child_process";
+import {
+  cleanupRuntime,
+  createRuntimeContext,
+  getFreePort,
+  startControlApi,
+  stopProcess
+} from "../helpers/runtime.mjs";
 import { enqueueIncident, listQueuedIncidents, replayOutbox } from "../../edge/edge-agent/src/outbox.mjs";
 
-const root = path.resolve(".");
-const dbPath = path.join(root, "services/control-api/data/control-api.db.json");
-const outboxDir = path.join(root, "edge/edge-agent/outbox");
+const root = process.cwd();
+const ctx = createRuntimeContext("offline-outbox");
+process.env.EDGE_OUTBOX_DIR = ctx.outboxDir;
+
+const port = await getFreePort();
+const endpoint = `http://localhost:${port}`;
 const cameraId = "cam-bop-01-east";
 const registration = {
   cameraId,
@@ -14,8 +22,6 @@ const registration = {
   location: "East perimeter",
   streamUri: "rtsp://camera.local/stream1"
 };
-
-cleanup();
 
 const queuedIncident = {
   schemaVersion: "incident-event.v1",
@@ -38,54 +44,31 @@ const queuedIncident = {
 enqueueIncident(queuedIncident);
 assert(listQueuedIncidents().length === 1, "incident should be queued before replay");
 
-const server = spawn(process.execPath, ["services/control-api/src/server.mjs"], {
-  cwd: root,
-  stdio: ["ignore", "pipe", "pipe"]
-});
-
+let server;
 try {
-  await waitForHealth();
-  const camera = await postJson("/api/cameras/register", registration, {});
-  const replayed = await replayOutbox({ endpoint: "http://localhost:7080", deviceKey: camera.deviceKey });
+  server = await startControlApi({ cwd: root, port, env: ctx.env });
+  const camera = await postJson(endpoint, "/api/cameras/register", registration, {});
+  const replayed = await replayOutbox({ endpoint, deviceKey: camera.deviceKey });
   assert(replayed[0]?.status === "replayed", "outbox item should replay");
   assert(listQueuedIncidents().length === 0, "outbox should be empty after replay");
 
-  const db = JSON.parse(fs.readFileSync(dbPath, "utf8"));
+  const db = JSON.parse(fs.readFileSync(ctx.dbPath, "utf8"));
   assert(db.incidents.some((incident) => incident.incidentId === queuedIncident.incidentId), "replayed incident should persist");
   console.log("PASS offline-outbox-replay integration");
 } finally {
-  server.kill();
+  await stopProcess(server);
+  cleanupRuntime(ctx);
+  delete process.env.EDGE_OUTBOX_DIR;
 }
 
-async function postJson(route, body, headers) {
-  const response = await fetch(`http://localhost:7080${route}`, {
+async function postJson(endpoint, route, body, headers) {
+  const response = await fetch(`${endpoint}${route}`, {
     method: "POST",
     headers: { "content-type": "application/json", ...headers },
     body: JSON.stringify(body)
   });
   if (!response.ok) throw new Error(`${route} failed with ${response.status}`);
   return response.json();
-}
-
-async function waitForHealth() {
-  const started = Date.now();
-  while (Date.now() - started < 5000) {
-    try {
-      const response = await fetch("http://localhost:7080/health");
-      if (response.ok) return;
-    } catch {
-      await new Promise((resolve) => setTimeout(resolve, 100));
-    }
-  }
-  throw new Error("control-api did not start");
-}
-
-function cleanup() {
-  if (fs.existsSync(dbPath)) fs.rmSync(dbPath, { force: true });
-  if (!fs.existsSync(outboxDir)) return;
-  for (const file of fs.readdirSync(outboxDir)) {
-    if (file.endsWith(".json")) fs.rmSync(path.join(outboxDir, file), { force: true });
-  }
 }
 
 function assert(condition, message) {

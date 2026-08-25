@@ -28,6 +28,7 @@ mlruns/
 services/control-api/data/*.json
 edge/edge-agent/outbox/*.json
 edge/edge-agent/data/evidence/*
+tmp/
 
 # IDE
 .vscode/

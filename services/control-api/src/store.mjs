@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 
-const DATA_DIR = path.resolve("services/control-api/data");
+const DATA_DIR = path.resolve(process.env.CONTROL_API_DATA_DIR || "services/control-api/data");
 const DB_PATH = path.join(DATA_DIR, "control-api.db.json");
 
 const EMPTY_DB = {

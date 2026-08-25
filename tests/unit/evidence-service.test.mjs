@@ -1,12 +1,15 @@
 import assert from "node:assert/strict";
 import fs from "node:fs";
 import path from "node:path";
-import { hashFile, verifyEvidenceManifest } from "../../services/evidence-service/src/manifest.mjs";
+import { cleanupRuntime, createRuntimeContext } from "../helpers/runtime.mjs";
 
-const tempDir = path.resolve("edge/edge-agent/data/evidence");
-fs.mkdirSync(tempDir, { recursive: true });
+const ctx = createRuntimeContext("evidence-unit");
+process.env.EVIDENCE_DIR = ctx.evidenceDir;
+const { hashFile, verifyEvidenceManifest } = await import("../../services/evidence-service/src/manifest.mjs");
 
-const assetPath = path.join(tempDir, "unit-evidence.txt");
+fs.mkdirSync(ctx.evidenceDir, { recursive: true });
+
+const assetPath = path.join(ctx.evidenceDir, "unit-evidence.txt");
 fs.writeFileSync(assetPath, "verified evidence asset");
 const sha256 = hashFile(assetPath);
 
@@ -31,5 +34,6 @@ const tampered = structuredClone(manifest);
 tampered.assets[0].sha256 = "0".repeat(64);
 assert.equal(verifyEvidenceManifest(tampered).valid, false);
 
-fs.rmSync(assetPath, { force: true });
+cleanupRuntime(ctx);
+delete process.env.EVIDENCE_DIR;
 console.log("PASS evidence-service unit");

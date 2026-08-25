@@ -59,6 +59,12 @@ Run contract and integration checks:
 npm test
 ```
 
+Run the stabilized suite three times:
+
+```bash
+npm run verify:stable
+```
+
 Run the control API:
 
 ```bash

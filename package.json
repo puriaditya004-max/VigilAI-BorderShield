@@ -14,7 +14,8 @@
     "unit:test": "node tests/unit/vision-runtime.test.mjs && node tests/unit/evidence-service.test.mjs",
     "integration:test": "node tests/integration/camera-to-incident.mjs && node tests/integration/offline-outbox-replay.mjs && node tests/integration/device-key-rotation.mjs",
     "e2e:test": "node tests/e2e/full-pipeline.mjs",
-    "test": "npm run contracts:test && npm run unit:test && npm run integration:test && npm run e2e:test"
+    "test": "npm run contracts:test && npm run unit:test && npm run integration:test && npm run e2e:test",
+    "verify:stable": "node tests/run-stability.mjs"
   },
   "engines": {
     "node": ">=20"
