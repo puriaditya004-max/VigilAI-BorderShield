@@ -43,7 +43,7 @@ Verification completed on 2026-08-26:
 | Real-time alerting and event logging | PARTIAL | Incident/audit flow plus SSE incident stream and operator lifecycle updates; full notification escalation pending. |
 | Command-and-control dashboard | PARTIAL | Static dashboard consumes live SSE incident updates, supports acknowledge/escalate actions and keeps polling fallback; React/TypeScript HMI not implemented. |
 | Existing CCTV/RTSP compatibility | PARTIAL | Python runtime accepts OpenCV sources including RTSP and maps source-frame detections into the canonical 1280x720 zone coordinate space; ONVIF discovery not implemented. |
-| Offline edge operation and synchronization | PARTIAL | Durable JSON outbox and replay in `edge/edge-agent/src/outbox.mjs`; evidence encryption is optional, encrypted rolling video buffer pending. |
+| Offline edge operation and synchronization | PARTIAL | Durable JSON outbox and replay in `edge/edge-agent/src/outbox.mjs`; evidence encryption is optional, bounded rolling frame buffer foundation exists, encrypted rolling video buffer pending. |
 | Accuracy/performance evaluation | PARTIAL | `npm run validation:field` generates fixture/real-source validation reports with explicit not-measured accuracy fields; labelled dataset and hardware still required for claims. |
 
 ## Phase 1 - Real Camera and Video Ingestion
@@ -178,6 +178,8 @@ Verification completed on 2026-08-26:
 | Visual evidence fixture | DONE | SVG keyframe generation in `edge/analytics/src/evidence.mjs` |
 | Real PNG keyframe evidence | PARTIAL | `createPngEvidence()` writes hash-verified PNG keyframes with bbox/zone/trajectory overlays and redaction metadata; covered by `tests/unit/evidence-service.test.mjs`. It is not yet wired as the default real-video evidence path. |
 | Evidence redaction metadata | DONE | Evidence manifests can carry redaction actions in `metadata.redactions`; covered by `tests/unit/evidence-service.test.mjs`. |
+| Rolling frame buffer | PARTIAL | `RollingFrameBuffer` in `edge/analytics/src/media-buffer.mjs` keeps bounded per-camera frame history and can select pre/post event windows; covered by `tests/unit/media-buffer.test.mjs`. Real decoder frame ingestion pending. |
+| Safe FFmpeg clip adapter | PARTIAL | `buildFfmpegImageSequenceArgs()` and `runFfmpegClip()` use argument arrays for future MP4 creation; covered by `tests/unit/media-buffer.test.mjs`. Actual playable MP4 generation requires FFmpeg and real/approved frame inputs. |
 | Metrics endpoint | DONE | `GET /api/metrics` |
 | Audit log | DONE | append-only audit entries in `services/control-api/src/store.mjs` |
 | Split vision-to-analytics bridge | DONE | `edge/vision-runtime/src/simulate-tracks.mjs`, `edge/analytics/src/track-bridge.mjs` |
