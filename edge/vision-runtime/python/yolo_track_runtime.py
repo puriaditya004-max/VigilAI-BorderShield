@@ -129,6 +129,12 @@ def log_capture_resolution(resolution, stream=sys.stderr):
     )
 
 
+def model_checksum(model_path):
+    if os.path.isfile(model_path):
+        return f"sha256:{sha256_file(model_path)}"
+    return "sha256:unverified-local-model"
+
+
 def track_event(camera_id, detection, model_name, frame_meta=None):
     x1, y1, x2, y2 = detection["xyxy"]
     capture_time = iso_now()
@@ -151,7 +157,7 @@ def track_event(camera_id, detection, model_name, frame_meta=None):
         "model": {
             "name": model_name,
             "version": "runtime-local",
-            "checksum": "sha256:unverified-local-model"
+            "checksum": detection.get("model_checksum", "sha256:unverified-local-model")
         }
     }
     if transform:
@@ -172,6 +178,7 @@ def main():
         raise SystemExit(f"Missing runtime dependency: {exc}. Install ultralytics and opencv-python.") from exc
 
     source = int(args.source) if args.source.isdigit() else args.source
+    checksum = model_checksum(args.model)
     model = YOLO(args.model)
     cap = cv2.VideoCapture(source)
     if not cap.isOpened():
@@ -227,7 +234,8 @@ def main():
               "class_id": class_id,
               "confidence": float(box.conf[0]),
               "xyxy": [float(v) for v in box.xyxy[0]],
-              "coordinate_transform": coordinate_transform
+              "coordinate_transform": coordinate_transform,
+              "model_checksum": checksum
           }
           if has_ids and box.id is not None:
               detection["track_id"] = int(box.id[0])

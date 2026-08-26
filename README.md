@@ -19,6 +19,7 @@ VigilAI-BorderShield/
 ├── edge/
 │   ├── edge-agent/          ONVIF/RTSP ingest, health, ring buffer, sync
 │   ├── vision-runtime/      Decode + GPU inference + tracking
+│   ├── orchestrator/        Real/simulated edge pipeline supervisor
 │   └── analytics/           ANPR, face, night, behavior, fence
 ├── packages/
 │   ├── contracts/           Protobuf / JSON Schema / OpenAPI shared contracts
@@ -95,6 +96,15 @@ python edge/vision-runtime/python/yolo_track_runtime.py --source 0 --model yolov
 ```
 
 The Python runtime requests 1280x720 capture, logs the camera-reported resolution to stderr, and emits detections in the canonical 1280x720 zone coordinate space used by `edge/analytics/config/zones.json`. When a camera falls back to another resolution, coordinates are mapped with aspect-ratio-preserving letterbox scaling and the original source bbox is preserved in `sourceBbox`.
+
+Run the orchestrated edge pipeline:
+
+```bash
+npm run edge:orchestrate
+npm run edge:orchestrate -- --mode=python-yolo --source=0 --model=yolov8n.pt
+```
+
+The orchestrator starts the selected producer, streams producer JSON into the analytics bridge, keeps operational logs on stderr, and returns a JSON summary on stdout.
 
 ## Reuse from current VigilAI-Platform repo (commit 0690c45)
 

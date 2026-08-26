@@ -1,0 +1,25 @@
+{
+  "mode": "simulator",
+  "controlApiUrl": "http://localhost:7080",
+  "cameraConfig": "edge/edge-agent/config/camera.json",
+  "zonesConfig": "edge/analytics/config/zones.json",
+  "producer": {
+    "simulator": {
+      "command": "node",
+      "args": ["edge/vision-runtime/src/simulate-tracks.mjs"]
+    },
+    "pythonYolo": {
+      "command": "python",
+      "args": [
+        "edge/vision-runtime/python/yolo_track_runtime.py",
+        "--source",
+        "{source}",
+        "--camera-id",
+        "{cameraId}",
+        "--model",
+        "{model}"
+      ],
+      "model": "yolov8n.pt"
+    }
+  }
+}

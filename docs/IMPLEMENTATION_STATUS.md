@@ -54,10 +54,11 @@ Verification completed on 2026-08-26:
 | Local video files | PARTIAL | Source classification and Python OpenCV source support exist; runtime logs actual capture resolution and canonical coordinate transform metadata; no committed real video fixture. |
 | USB camera input | PARTIAL | `0`/numeric source classification and Python OpenCV source support exist; runtime requests 1280x720, logs actual webcam resolution and maps non-1280 frames into canonical zone coordinates. Hardware not tested in automation. |
 | Coordinate-space normalization | DONE | `build_coordinate_transform()` and `track_event()` in `edge/vision-runtime/python/yolo_track_runtime.py` map 640x480, 1920x1080 and 1280x720 detections into canonical 1280x720 zone coordinates while preserving `sourceBbox`; covered by `tests/unit/yolo-runtime-resolution.test.mjs` and `tests/integration/non-1280-coordinate-fence.mjs`. |
+| Integrated edge orchestrator | PARTIAL | `edge/orchestrator/src/edge-orchestrator.mjs` runs simulator or Python YOLO producer output through the analytics bridge with structured stderr logs and JSON stdout summary; covered by `tests/unit/edge-orchestrator.test.mjs` and `tests/integration/edge-orchestrator-pipeline.mjs`. Real video/RTSP execution requires external Python runtime dependencies, model files and footage. |
 | ONVIF discovery optional adapter | PARTIAL | `ONVIF` source type placeholder and URI classification exist; discovery protocol not implemented. |
 | Reconnection with exponential backoff | DONE | `reconnectDelay()` in `edge/edge-agent/src/camera-source.mjs`, covered by `tests/unit/camera-source.test.mjs`. |
 | Stream-health monitoring | DONE | `StreamHealthTracker` emits `CameraHealth` payloads with dropped frames and latency. |
-| FPS, resolution, latency and dropped-frame metrics | PARTIAL | Dropped-frame and latency metrics implemented; Python runtime requests/logs capture resolution. Measured FPS is pending real frame reader integration. |
+| FPS, resolution, latency and dropped-frame metrics | PARTIAL | Dropped-frame and latency metrics implemented; Python runtime requests/logs capture resolution and the orchestrator reports runtime duration/incident summary. Measured FPS from the real decoder loop is still pending. |
 | Secure camera credential handling | PARTIAL | `redactUri()` prevents RTSP credentials in health payloads/loggable values; secret reference loading pending. |
 | Configurable frame sampling | DONE | `frameSampling.targetFps` and `maxDecodeFps` validated in camera source config. |
 | CPU and NVIDIA GPU execution modes | PARTIAL | Runtime config supports `CPU`/future modes; GPU execution not tested. |
@@ -178,6 +179,7 @@ Verification completed on 2026-08-26:
 | Metrics endpoint | DONE | `GET /api/metrics` |
 | Audit log | DONE | append-only audit entries in `services/control-api/src/store.mjs` |
 | Split vision-to-analytics bridge | DONE | `edge/vision-runtime/src/simulate-tracks.mjs`, `edge/analytics/src/track-bridge.mjs` |
+| Edge pipeline orchestrator | PARTIAL | `edge/orchestrator/` supervises simulator or Python YOLO producer and routes JSON events through `runTrackBridge()` into the control API. |
 | ANPR rule foundation | PARTIAL | `edge/analytics/src/anpr.mjs`; optional OCR command adapter present, real crop validation pending. |
 | Suspicious-activity rule foundation | PARTIAL | `edge/analytics/src/suspicious-activity.mjs`; real-world tuning pending. |
 | Virtual-fence policy hardening | DONE | `FenceIncidentPolicy`, class filters, active schedule and cooldown in `edge/analytics/src/virtual-fence.mjs`. |
@@ -193,6 +195,7 @@ Verification completed on 2026-08-26:
 | Model/dataset promotion guardrails | DONE | Dataset and model registry templates prevent unsupported accuracy claims. |
 | Real-producer trajectory compatibility | DONE | Bridge accumulates incoming single-point trajectories so real YOLO runtime can trigger fence policy. |
 | Optional OCR/face runtime adapters | PARTIAL | PaddleOCR/OpenCV wrappers and Node command adapters exist; dependencies and field data must be supplied externally. |
+| Python runtime dependency pinning | DONE | `edge/vision-runtime/python/requirements.txt` pins `opencv-python` and `ultralytics` for the real YOLO runtime. |
 
 ## Current Verification Commands
 
