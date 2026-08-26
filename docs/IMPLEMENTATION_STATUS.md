@@ -32,7 +32,7 @@ Verification completed on 2026-08-26:
 
 | Capability | Status | Evidence |
 |---|---|---|
-| Human detection and tracking | PARTIAL | `edge/vision-runtime/src/track-event-adapter.mjs`, `edge/vision-runtime/python/yolo_track_runtime.py`; fixture tested, real camera pipeline supported but accuracy not measured. |
+| Human detection and tracking | PARTIAL | `edge/vision-runtime/src/track-event-adapter.mjs`, `edge/vision-runtime/python/yolo_track_runtime.py`; fixture tested, real camera pipeline supported with canonical coordinate mapping, but accuracy not measured. |
 | Vehicle detection and classification | PARTIAL | Person/vehicle class mapping in `edge/vision-runtime/src/track-event-adapter.mjs`; fixture tested. |
 | Face detection only by default | PARTIAL | `edge/vision-runtime/src/privacy-redaction.mjs` can consume an external/OpenCV face detector runtime for redaction-only candidates and rejects biometric identity fields; field validation pending. |
 | Optional privacy blur | PARTIAL | `buildPrivacyRedactionPlan()` outputs face/plate blur actions with configurable detect-only mode; evidence artifacts can be encrypted; pixel-level media transform integration pending. |
@@ -42,7 +42,7 @@ Verification completed on 2026-08-26:
 | Night-movement analytics | PARTIAL | Low-light quality assessment, night movement rule and tamper rules in `edge/analytics/src/night-watch.mjs`; camera-specific tuning pending. |
 | Real-time alerting and event logging | PARTIAL | Incident/audit flow plus SSE incident stream and operator lifecycle updates; full notification escalation pending. |
 | Command-and-control dashboard | PARTIAL | Static dashboard consumes live SSE incident updates, supports acknowledge/escalate actions and keeps polling fallback; React/TypeScript HMI not implemented. |
-| Existing CCTV/RTSP compatibility | PARTIAL | Python runtime accepts OpenCV sources including RTSP; ONVIF discovery not implemented. |
+| Existing CCTV/RTSP compatibility | PARTIAL | Python runtime accepts OpenCV sources including RTSP and maps source-frame detections into the canonical 1280x720 zone coordinate space; ONVIF discovery not implemented. |
 | Offline edge operation and synchronization | PARTIAL | Durable JSON outbox and replay in `edge/edge-agent/src/outbox.mjs`; evidence encryption is optional, encrypted rolling video buffer pending. |
 | Accuracy/performance evaluation | PARTIAL | `npm run validation:field` generates fixture/real-source validation reports with explicit not-measured accuracy fields; labelled dataset and hardware still required for claims. |
 
@@ -50,9 +50,10 @@ Verification completed on 2026-08-26:
 
 | Requirement | Status | Evidence |
 |---|---|---|
-| RTSP URLs | PARTIAL | `edge/edge-agent/src/camera-source.mjs` classifies/redacts RTSP sources; `edge/vision-runtime/python/yolo_track_runtime.py` accepts RTSP through OpenCV and requests 1280x720 capture geometry. Real RTSP not tested. |
-| Local video files | PARTIAL | Source classification and Python OpenCV source support exist; runtime logs actual capture resolution; no committed real video fixture. |
-| USB camera input | PARTIAL | `0`/numeric source classification and Python OpenCV source support exist; runtime requests 1280x720 and logs actual webcam resolution. Hardware not tested in automation. |
+| RTSP URLs | PARTIAL | `edge/edge-agent/src/camera-source.mjs` classifies/redacts RTSP sources; `edge/vision-runtime/python/yolo_track_runtime.py` accepts RTSP through OpenCV, requests 1280x720 capture geometry, logs reported resolution and emits canonical 1280x720 coordinates. Real RTSP not tested. |
+| Local video files | PARTIAL | Source classification and Python OpenCV source support exist; runtime logs actual capture resolution and canonical coordinate transform metadata; no committed real video fixture. |
+| USB camera input | PARTIAL | `0`/numeric source classification and Python OpenCV source support exist; runtime requests 1280x720, logs actual webcam resolution and maps non-1280 frames into canonical zone coordinates. Hardware not tested in automation. |
+| Coordinate-space normalization | DONE | `build_coordinate_transform()` and `track_event()` in `edge/vision-runtime/python/yolo_track_runtime.py` map 640x480, 1920x1080 and 1280x720 detections into canonical 1280x720 zone coordinates while preserving `sourceBbox`; covered by `tests/unit/yolo-runtime-resolution.test.mjs` and `tests/integration/non-1280-coordinate-fence.mjs`. |
 | ONVIF discovery optional adapter | PARTIAL | `ONVIF` source type placeholder and URI classification exist; discovery protocol not implemented. |
 | Reconnection with exponential backoff | DONE | `reconnectDelay()` in `edge/edge-agent/src/camera-source.mjs`, covered by `tests/unit/camera-source.test.mjs`. |
 | Stream-health monitoring | DONE | `StreamHealthTracker` emits `CameraHealth` payloads with dropped frames and latency. |

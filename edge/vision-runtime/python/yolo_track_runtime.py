@@ -16,6 +16,7 @@ import argparse
 import hashlib
 import json
 import os
+import sys
 import time
 from datetime import datetime, timezone
 
@@ -71,11 +72,70 @@ def configure_capture_resolution(cap, width=ZONE_FRAME_WIDTH, height=ZONE_FRAME_
     }
 
 
+def build_coordinate_transform(source_width, source_height, canonical_width=ZONE_FRAME_WIDTH, canonical_height=ZONE_FRAME_HEIGHT):
+    source_width = int(source_width or 0)
+    source_height = int(source_height or 0)
+    canonical_width = int(canonical_width or 0)
+    canonical_height = int(canonical_height or 0)
+    if source_width <= 0 or source_height <= 0 or canonical_width <= 0 or canonical_height <= 0:
+        return {
+            "valid": False,
+            "reason": "INVALID_FRAME_DIMENSIONS",
+            "source": {"width": source_width, "height": source_height},
+            "canonical": {"width": canonical_width, "height": canonical_height}
+        }
+
+    scale = min(canonical_width / source_width, canonical_height / source_height)
+    scaled_width = source_width * scale
+    scaled_height = source_height * scale
+    pad_x = (canonical_width - scaled_width) / 2
+    pad_y = (canonical_height - scaled_height) / 2
+    return {
+        "valid": True,
+        "mode": "aspect_fit_letterbox",
+        "source": {"width": source_width, "height": source_height},
+        "canonical": {"width": canonical_width, "height": canonical_height},
+        "scale": scale,
+        "padding": {"x": pad_x, "y": pad_y}
+    }
+
+
+def transform_point(point, transform):
+    return {
+        "x": point["x"] * transform["scale"] + transform["padding"]["x"],
+        "y": point["y"] * transform["scale"] + transform["padding"]["y"]
+    }
+
+
+def transform_bbox(bbox, transform):
+    top_left = transform_point({"x": bbox["x"], "y": bbox["y"]}, transform)
+    return {
+        "x": top_left["x"],
+        "y": top_left["y"],
+        "width": bbox["width"] * transform["scale"],
+        "height": bbox["height"] * transform["scale"]
+    }
+
+
+def log_capture_resolution(resolution, stream=sys.stderr):
+    print(
+        "Capture resolution requested="
+        f"{resolution['requested']['width']}x{resolution['requested']['height']} "
+        "actual="
+        f"{resolution['actual']['width']}x{resolution['actual']['height']} "
+        f"matches_zone_geometry={str(resolution['matches_zone_geometry']).lower()}",
+        file=stream,
+        flush=True
+    )
+
+
 def track_event(camera_id, detection, model_name, frame_meta=None):
     x1, y1, x2, y2 = detection["xyxy"]
     capture_time = iso_now()
     track_id = str(detection.get("track_id", f"{detection['class_id']}-{int(x1)}-{int(y1)}"))
-    bbox = {"x": x1, "y": y1, "width": x2 - x1, "height": y2 - y1}
+    source_bbox = {"x": x1, "y": y1, "width": x2 - x1, "height": y2 - y1}
+    transform = detection.get("coordinate_transform")
+    bbox = transform_bbox(source_bbox, transform) if transform and transform.get("valid") else source_bbox
     footpoint = {"x": bbox["x"] + bbox["width"] / 2, "y": bbox["y"] + bbox["height"], "t": capture_time}
 
     event = {
@@ -94,6 +154,9 @@ def track_event(camera_id, detection, model_name, frame_meta=None):
             "checksum": "sha256:unverified-local-model"
         }
     }
+    if transform:
+        event["coordinateSpace"] = transform
+        event["sourceBbox"] = source_bbox
     if frame_meta:
         event["frame"] = frame_meta
     return event
@@ -118,15 +181,7 @@ def main():
         width=ZONE_FRAME_WIDTH,
         height=ZONE_FRAME_HEIGHT
     )
-    print(
-        "Capture resolution requested="
-        f"{resolution['requested']['width']}x{resolution['requested']['height']} "
-        "actual="
-        f"{resolution['actual']['width']}x{resolution['actual']['height']} "
-        f"matches_zone_geometry={str(resolution['matches_zone_geometry']).lower()}",
-        file=sys.stderr,
-        flush=True
-    )
+    log_capture_resolution(resolution)
 
     frame_count = 0
     while True:
@@ -135,6 +190,29 @@ def main():
           break
 
       frame_count += 1
+      source_height, source_width = frame.shape[:2]
+      coordinate_transform = build_coordinate_transform(source_width, source_height)
+      if not coordinate_transform["valid"]:
+          print(
+              f"Skipping frame {frame_count}: {coordinate_transform['reason']} "
+              f"source={source_width}x{source_height}",
+              file=sys.stderr,
+              flush=True
+          )
+          continue
+
+      if frame_count == 1 and (source_width != ZONE_FRAME_WIDTH or source_height != ZONE_FRAME_HEIGHT):
+          print(
+              "Coordinate transform active "
+              f"source={source_width}x{source_height} "
+              f"canonical={ZONE_FRAME_WIDTH}x{ZONE_FRAME_HEIGHT} "
+              f"mode={coordinate_transform['mode']} "
+              f"scale={coordinate_transform['scale']:.6f} "
+              f"padding={coordinate_transform['padding']['x']:.2f},{coordinate_transform['padding']['y']:.2f}",
+              file=sys.stderr,
+              flush=True
+          )
+
       results = model.track(frame, persist=True, verbose=False, conf=args.confidence)[0]
       if results.boxes is None:
           continue
@@ -148,7 +226,8 @@ def main():
           detection = {
               "class_id": class_id,
               "confidence": float(box.conf[0]),
-              "xyxy": [float(v) for v in box.xyxy[0]]
+              "xyxy": [float(v) for v in box.xyxy[0]],
+              "coordinate_transform": coordinate_transform
           }
           if has_ids and box.id is not None:
               detection["track_id"] = int(box.id[0])

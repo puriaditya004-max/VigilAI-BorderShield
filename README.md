@@ -88,6 +88,14 @@ npm run --silent vision:simulate | npm run --silent edge:bridge
 
 Then open `http://localhost:7080/` to view cameras, incidents, evidence and audit events.
 
+Run the real OpenCV/YOLO producer through the same bridge:
+
+```bash
+python edge/vision-runtime/python/yolo_track_runtime.py --source 0 --model yolov8n.pt | npm run --silent edge:bridge
+```
+
+The Python runtime requests 1280x720 capture, logs the camera-reported resolution to stderr, and emits detections in the canonical 1280x720 zone coordinate space used by `edge/analytics/config/zones.json`. When a camera falls back to another resolution, coordinates are mapped with aspect-ratio-preserving letterbox scaling and the original source bbox is preserved in `sourceBbox`.
+
 ## Reuse from current VigilAI-Platform repo (commit 0690c45)
 
 Reuse with refactoring:
