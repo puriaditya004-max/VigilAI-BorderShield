@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
-import { buildPlateCandidate, isValidIndianPlate, normalizePlateText, votePlateCandidates } from "../../edge/analytics/src/anpr.mjs";
+import path from "node:path";
+import { buildPlateCandidate, isValidIndianPlate, normalizePlateText, ocrPlateImage, votePlateCandidates } from "../../edge/analytics/src/anpr.mjs";
 
 assert.equal(normalizePlateText(" mh 12 ab 1234 "), "MH12AB1234");
 assert.equal(isValidIndianPlate("MH12AB1234"), true);
@@ -21,5 +22,18 @@ assert.deepEqual(result.reasonCodes, ["VALID_PLATE_FORMAT", "TEMPORAL_VOTE_CONFI
 const weak = votePlateCandidates(candidates.slice(0, 2), { minVotes: 3, minConfidence: 0.65 });
 assert.equal(weak.accepted, false);
 assert.deepEqual(weak.reasonCodes, ["INSUFFICIENT_TEMPORAL_VOTES"]);
+
+const ocr = await ocrPlateImage({
+  imagePath: path.resolve("tests/fixtures/plate-crop.jpg"),
+  cameraId: "cam-1",
+  trackId: "veh-ocr",
+  command: process.execPath,
+  args: ["tests/fixtures/mock-ocr-engine.mjs", "--image", "{imagePath}"],
+  voteOptions: { minVotes: 3, minConfidence: 0.65 },
+  captureTime: "2026-08-26T00:00:04.000Z"
+});
+assert.equal(ocr.accepted, true);
+assert.equal(ocr.normalizedText, "MH12AB1234");
+assert.equal(ocr.candidates.length, 3);
 
 console.log("PASS anpr unit");

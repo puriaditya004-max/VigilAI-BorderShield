@@ -1,8 +1,10 @@
 import assert from "node:assert/strict";
+import path from "node:path";
 import {
   assertNoBiometricIdentityFields,
   buildFaceCandidate,
   buildPrivacyRedactionPlan,
+  detectFaceCandidatesFromImage,
   detectionToPrivacyTarget
 } from "../../edge/vision-runtime/src/privacy-redaction.mjs";
 
@@ -47,5 +49,18 @@ const detectOnly = buildPrivacyRedactionPlan({
 });
 assert.equal(detectOnly.redactionRequired, false);
 assert.equal(detectOnly.targets[0].action, "DETECT_ONLY");
+
+const runtimeFaces = await detectFaceCandidatesFromImage({
+  imagePath: path.resolve("tests/fixtures/face-frame.jpg"),
+  cameraId: "cam-1",
+  frameTime: "2026-08-26T00:00:01.000Z",
+  frameSize,
+  command: process.execPath,
+  args: ["tests/fixtures/mock-face-engine.mjs", "--image", "{imagePath}"]
+});
+assert.equal(runtimeFaces.candidates.length, 1);
+assert.equal(runtimeFaces.candidates[0].identityRecognition, false);
+assert(runtimeFaces.reasonCodes.includes("FACE_DETECTION_RUNTIME_CONNECTED"));
+assert.equal(runtimeFaces.redactionPlan.redactionRequired, true);
 
 console.log("PASS privacy-redaction unit");

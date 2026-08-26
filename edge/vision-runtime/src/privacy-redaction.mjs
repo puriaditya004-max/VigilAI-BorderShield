@@ -1,3 +1,5 @@
+import { applyArgTemplate, runJsonCommand } from "./runtime-command.mjs";
+
 const FACE_CLASS_NAMES = new Set(["face", "person-face", "human-face"]);
 const PLATE_CLASS_NAMES = new Set(["license_plate", "licence_plate", "number_plate", "plate"]);
 
@@ -62,6 +64,41 @@ export function buildPrivacyRedactionPlan({
   };
 }
 
+export async function detectFaceCandidatesFromImage({
+  imagePath,
+  cameraId,
+  frameTime = new Date().toISOString(),
+  frameSize,
+  command = process.env.FACE_DETECT_COMMAND,
+  args = (process.env.FACE_DETECT_ARGS || "--image {imagePath}").split(" ").filter(Boolean)
+}) {
+  const commandResult = await runJsonCommand(command, applyArgTemplate(args, { imagePath }), {
+    timeoutMs: Number(process.env.FACE_DETECT_TIMEOUT_MS || 30000)
+  });
+  if (!commandResult.ok) {
+    return {
+      candidates: [],
+      redactionPlan: buildPrivacyRedactionPlan({ detections: [], frameSize }),
+      reasonCodes: ["FACE_DETECTOR_UNAVAILABLE"],
+      error: commandResult.error
+    };
+  }
+
+  const detections = normalizeFaceDetections(commandResult.data);
+  const candidates = detections
+    .map((detection) => buildFaceCandidate({ detection, cameraId, frameTime, frameSize }))
+    .filter(Boolean);
+  for (const candidate of candidates) assertNoBiometricIdentityFields(candidate);
+
+  return {
+    candidates,
+    redactionPlan: buildPrivacyRedactionPlan({ detections, frameSize }),
+    reasonCodes: candidates.length > 0
+      ? ["FACE_DETECTION_RUNTIME_CONNECTED", "IDENTITY_RECOGNITION_DISABLED"]
+      : ["FACE_DETECTOR_RETURNED_NO_FACES", "IDENTITY_RECOGNITION_DISABLED"]
+  };
+}
+
 export function assertNoBiometricIdentityFields(candidate) {
   const forbidden = ["personId", "identity", "name", "embedding", "faceEmbedding", "matchId"];
   const present = forbidden.filter((field) => Object.hasOwn(candidate, field));
@@ -69,6 +106,15 @@ export function assertNoBiometricIdentityFields(candidate) {
     throw new Error(`Biometric identity fields are not allowed: ${present.join(", ")}`);
   }
   return true;
+}
+
+function normalizeFaceDetections(payload) {
+  const rows = Array.isArray(payload) ? payload : payload?.faces || payload?.detections || [];
+  return rows.map((row) => ({
+    className: row.className || "face",
+    confidence: row.confidence ?? row.score ?? row.probability ?? 0,
+    bbox: row.bbox || row.box || row.xyxy
+  })).filter((row) => row.bbox);
 }
 
 function normalizeBbox(bbox) {

@@ -10,6 +10,7 @@ import { enqueueIncident, replayOutbox } from "../../edge-agent/src/outbox.mjs";
 const API_BASE = process.env.CONTROL_API_URL || "http://localhost:7080";
 const cameraConfigPath = process.env.CAMERA_CONFIG || "edge/edge-agent/config/camera.json";
 const zonesConfigPath = process.env.ZONES_CONFIG || "edge/analytics/config/zones.json";
+const TRAJECTORY_HISTORY_POINTS = Number(process.env.TRACK_TRAJECTORY_HISTORY_POINTS || 20);
 
 export async function runTrackBridge({ input = process.stdin, endpoint = API_BASE } = {}) {
   const camera = JSON.parse(fs.readFileSync(cameraConfigPath, "utf8"));
@@ -19,6 +20,7 @@ export async function runTrackBridge({ input = process.stdin, endpoint = API_BAS
 
   const emitted = [];
   const crossingState = new Map();
+  const trajectoryHistory = new Map();
   const fencePolicy = new FenceIncidentPolicy();
   const reader = readline.createInterface({ input, crlfDelay: Infinity });
 
@@ -35,11 +37,12 @@ export async function runTrackBridge({ input = process.stdin, endpoint = API_BAS
     }
 
     if (trackEvent.schemaVersion !== "track-event.v1") continue;
-    const matchingZones = zones.filter((zone) => zone.cameraId === trackEvent.cameraId);
+    const accumulatedTrackEvent = accumulateTrackTrajectory(trajectoryHistory, trackEvent);
+    const matchingZones = zones.filter((zone) => zone.cameraId === accumulatedTrackEvent.cameraId);
 
     for (const zone of matchingZones) {
-      const key = `${trackEvent.trackId}:${zone.zoneId}`;
-      if (!crossedFence(trackEvent.trajectory, zone)) {
+      const key = `${accumulatedTrackEvent.trackId}:${zone.zoneId}`;
+      if (!crossedFence(accumulatedTrackEvent.trajectory, zone)) {
         crossingState.delete(key);
         continue;
       }
@@ -49,12 +52,12 @@ export async function runTrackBridge({ input = process.stdin, endpoint = API_BAS
       if (count < (zone.persistenceFrames || 1)) continue;
 
       crossingState.delete(key);
-      const decision = fencePolicy.evaluate({ trackEvent, zone });
+      const decision = fencePolicy.evaluate({ trackEvent: accumulatedTrackEvent, zone });
       if (!decision.allowed) continue;
 
-      const incidentHint = `inc-${trackEvent.cameraId}-${trackEvent.trackId}-${Date.parse(trackEvent.captureTime)}`;
-      const evidence = createTextEvidence({ incidentHint, trackEvent, zone });
-      const incident = buildIntrusionIncident({ trackEvent, zone, evidence, decision });
+      const incidentHint = `inc-${accumulatedTrackEvent.cameraId}-${accumulatedTrackEvent.trackId}-${Date.parse(accumulatedTrackEvent.captureTime)}`;
+      const evidence = createTextEvidence({ incidentHint, trackEvent: accumulatedTrackEvent, zone });
+      const incident = buildIntrusionIncident({ trackEvent: accumulatedTrackEvent, zone, evidence, decision });
 
       const accepted = await sendIncident({ endpoint, incident, deviceKey: registered.deviceKey }).catch(() => false);
       if (!accepted) {
@@ -68,6 +71,38 @@ export async function runTrackBridge({ input = process.stdin, endpoint = API_BAS
   }
 
   return emitted;
+}
+
+export function accumulateTrackTrajectory(history, trackEvent, { maxPoints = TRAJECTORY_HISTORY_POINTS } = {}) {
+  const key = `${trackEvent.cameraId}:${trackEvent.trackId}`;
+  const previous = history.get(key) || [];
+  const incoming = normalizeTrajectory(trackEvent);
+  const merged = mergeTrajectory(previous, incoming).slice(-maxPoints);
+  history.set(key, merged);
+  return { ...trackEvent, trajectory: merged };
+}
+
+function normalizeTrajectory(trackEvent) {
+  const fallbackTime = trackEvent.captureTime || new Date().toISOString();
+  return (trackEvent.trajectory || [])
+    .filter((point) => Number.isFinite(Number(point.x)) && Number.isFinite(Number(point.y)))
+    .map((point) => ({
+      x: Number(point.x),
+      y: Number(point.y),
+      t: point.t || fallbackTime
+    }));
+}
+
+function mergeTrajectory(previous, incoming) {
+  const merged = [];
+  const seen = new Set();
+  for (const point of [...previous, ...incoming]) {
+    const key = `${point.x}:${point.y}:${point.t || ""}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    merged.push(point);
+  }
+  return merged;
 }
 
 if (process.argv[1] && fileURLToPath(import.meta.url) === path.resolve(process.argv[1])) {

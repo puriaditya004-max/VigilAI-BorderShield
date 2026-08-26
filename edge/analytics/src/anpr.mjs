@@ -1,3 +1,5 @@
+import { applyArgTemplate, runJsonCommand } from "../../vision-runtime/src/runtime-command.mjs";
+
 const INDIA_PLATE_PATTERN = /^[A-Z]{2}[0-9]{1,2}[A-Z]{1,3}[0-9]{4}$/;
 
 export function normalizePlateText(rawText) {
@@ -70,6 +72,61 @@ export function votePlateCandidates(candidates, { minVotes = 3, minConfidence = 
     lastSeenAt: winner.lastSeenAt,
     reasonCodes: ["VALID_PLATE_FORMAT", "TEMPORAL_VOTE_CONFIRMED"]
   };
+}
+
+export async function ocrPlateImage({
+  imagePath,
+  cameraId,
+  trackId = "plate-crop",
+  captureTime = new Date().toISOString(),
+  command = process.env.ANPR_OCR_COMMAND,
+  args = (process.env.ANPR_OCR_ARGS || "--image {imagePath}").split(" ").filter(Boolean),
+  voteOptions = {}
+}) {
+  const commandResult = await runJsonCommand(command, applyArgTemplate(args, { imagePath }), {
+    timeoutMs: Number(process.env.ANPR_OCR_TIMEOUT_MS || 30000)
+  });
+  if (!commandResult.ok) {
+    return {
+      accepted: false,
+      candidates: [],
+      reasonCodes: ["OCR_ENGINE_UNAVAILABLE"],
+      error: commandResult.error
+    };
+  }
+
+  const rows = normalizeOcrRows(commandResult.data);
+  const candidates = rows.map((row, index) => buildPlateCandidate({
+    cameraId,
+    trackId: `${trackId}-${index + 1}`,
+    rawText: row.text,
+    confidence: row.confidence,
+    captureTime
+  }));
+
+  if (candidates.length === 0) {
+    return {
+      accepted: false,
+      candidates,
+      reasonCodes: ["OCR_RETURNED_NO_TEXT"]
+    };
+  }
+
+  const vote = votePlateCandidates(candidates, voteOptions);
+  return {
+    ...vote,
+    candidates
+  };
+}
+
+function normalizeOcrRows(payload) {
+  const rows = Array.isArray(payload) ? payload : payload?.results || payload?.detections || [];
+  return rows
+    .map((row) => ({
+      text: row.text ?? row.rawText ?? row.label ?? "",
+      confidence: row.confidence ?? row.score ?? row.probability ?? 0
+    }))
+    .filter((row) => String(row.text).trim());
 }
 
 function clampConfidence(value) {

@@ -34,10 +34,10 @@ Verification completed on 2026-08-26:
 |---|---|---|
 | Human detection and tracking | PARTIAL | `edge/vision-runtime/src/track-event-adapter.mjs`, `edge/vision-runtime/python/yolo_track_runtime.py`; fixture tested, real camera not yet measured. |
 | Vehicle detection and classification | PARTIAL | Person/vehicle class mapping in `edge/vision-runtime/src/track-event-adapter.mjs`; fixture tested. |
-| Face detection only by default | PARTIAL | `edge/vision-runtime/src/privacy-redaction.mjs` builds face candidates for redaction only and rejects biometric identity fields; detector integration pending. |
+| Face detection only by default | PARTIAL | `edge/vision-runtime/src/privacy-redaction.mjs` can consume an external/OpenCV face detector runtime for redaction-only candidates and rejects biometric identity fields; field validation pending. |
 | Optional privacy blur | PARTIAL | `buildPrivacyRedactionPlan()` outputs face/plate blur actions with configurable detect-only mode; evidence artifacts can be encrypted; pixel-level media transform integration pending. |
-| ANPR / number-plate OCR | PARTIAL | Normalization, Indian plate-format validation, confidence thresholding and temporal voting foundation in `edge/analytics/src/anpr.mjs`; OCR detector integration pending. |
-| Virtual-fence intrusion | DONE | `edge/analytics/src/virtual-fence.mjs`, `edge/analytics/config/zones.json`, tested by unit/integration/e2e. |
+| ANPR / number-plate OCR | PARTIAL | Normalization, Indian plate-format validation, confidence thresholding, temporal voting and optional PaddleOCR runtime adapter in `edge/analytics/src/anpr.mjs`; field validation pending. |
+| Virtual-fence intrusion | DONE | `edge/analytics/src/virtual-fence.mjs`, bridge-side trajectory accumulation, `edge/analytics/config/zones.json`, tested by unit/integration/e2e including Python-style single-point streams. |
 | Suspicious-activity analytics | PARTIAL | Rule foundations for loitering, repeated boundary approach, crowd formation and sudden speed change in `edge/analytics/src/suspicious-activity.mjs`; no measured field tuning yet. |
 | Night-movement analytics | PARTIAL | Low-light quality assessment, night movement rule and tamper rules in `edge/analytics/src/night-watch.mjs`; camera-specific tuning pending. |
 | Real-time alerting and event logging | PARTIAL | Incident/audit flow plus SSE incident stream and operator lifecycle updates; full notification escalation pending. |
@@ -68,7 +68,7 @@ Verification completed on 2026-08-26:
 | ANPR text normalization | DONE | `normalizePlateText()` in `edge/analytics/src/anpr.mjs`, covered by `tests/unit/anpr.test.mjs`. |
 | Plate-format validation | DONE | Indian registration pattern validation in `isValidIndianPlate()`. |
 | Temporal voting for ANPR | DONE | `votePlateCandidates()` requires repeated valid candidates above configurable confidence before accepting a plate. |
-| OCR/model integration for ANPR | BLOCKED | Requires detector/OCR model assets or camera footage; no fake plate accuracy claimed. |
+| OCR/model integration for ANPR | PARTIAL | `ocrPlateImage()` consumes runtime JSON from `ANPR_OCR_COMMAND`; optional PaddleOCR wrapper in `edge/analytics/python/paddleocr_plate_runtime.py`. Requires installed OCR dependencies and real crop validation. |
 | Loitering detection | PARTIAL | `detectLoitering()` uses configurable dwell threshold and polygon containment. |
 | Repeated boundary approach | PARTIAL | `detectRepeatedBoundaryApproach()` uses configurable distance and count thresholds. |
 | Crowd formation | PARTIAL | `detectCrowdFormation()` counts tracked objects inside a configured polygon. |
@@ -78,11 +78,19 @@ Verification completed on 2026-08-26:
 | Virtual-fence duplicate cooldown | DONE | `FenceIncidentPolicy` suppresses duplicate alerts with `DUPLICATE_COOLDOWN_ACTIVE`. |
 | Decision reason codes | DONE | Rule outcomes include deterministic reason codes; incident reason codes include `ZONE_POLICY_MATCHED` when policy passes. |
 
+## Phase 2A - Real-Producer Bridge Compatibility
+
+| Requirement | Status | Evidence |
+|---|---|---|
+| Python-style single-point TrackEvent accumulation | DONE | `accumulateTrackTrajectory()` in `edge/analytics/src/track-bridge.mjs` stores per-camera/track history and caps it to `TRACK_TRAJECTORY_HISTORY_POINTS`. |
+| Preserve already-accumulated simulated trajectories | DONE | Accumulation deduplicates points by x/y/t so fixture multi-point trajectories are not corrupted. |
+| Real-producer fence crossing regression test | DONE | `tests/integration/python-style-track-stream.mjs` sends one footpoint per event and asserts a virtual-fence incident is created. |
+
 ## Phase 3 - Privacy and Night Operations Foundation
 
 | Requirement | Status | Evidence |
 |---|---|---|
-| Face detection without identity recognition | PARTIAL | `buildFaceCandidate()` emits `identityRecognition: false` and reason `IDENTITY_RECOGNITION_DISABLED`; no recognition/matching path exists. |
+| Face detection without identity recognition | PARTIAL | `buildFaceCandidate()` emits `identityRecognition: false`; `detectFaceCandidatesFromImage()` consumes face detector JSON for redaction-only candidates; no recognition/matching path exists. |
 | Block biometric identity fields | DONE | `assertNoBiometricIdentityFields()` rejects `personId`, names, embeddings and match identifiers. |
 | Face privacy redaction plan | DONE | `buildPrivacyRedactionPlan()` creates bounded face blur targets and supports detect-only mode. |
 | Number-plate redaction plan | DONE | Same privacy plan supports plate blur targets separate from ANPR voting. |
@@ -145,6 +153,16 @@ Verification completed on 2026-08-26:
 | Model promotion template | DONE | `ml/model-registry/README.md` documents model card, checksum, metrics and rollback gate. |
 | Production model promotion | BLOCKED | Requires real model artifacts, labelled validation footage and approval. |
 
+## Phase 8 - OCR and Face Runtime Adapters
+
+| Requirement | Status | Evidence |
+|---|---|---|
+| ANPR OCR command adapter | DONE | `ocrPlateImage()` runs a configured JSON OCR command and feeds text into normalization/validation/voting. |
+| PaddleOCR wrapper | PARTIAL | `edge/analytics/python/paddleocr_plate_runtime.py` emits OCR JSON when PaddleOCR dependencies are installed; no committed model output fixture is treated as accuracy. |
+| Face detector command adapter | DONE | `detectFaceCandidatesFromImage()` runs a configured detector command and converts detections into privacy redaction candidates. |
+| OpenCV face detector wrapper | PARTIAL | `edge/vision-runtime/python/opencv_face_runtime.py` emits face boxes using OpenCV Haar cascade when installed; redaction-only, no recognition. |
+| Adapter tests | DONE | Unit tests use mock JSON runtime commands for ANPR and face detection parsing. |
+
 ## Implemented Foundation
 
 | Area | Status | Evidence |
@@ -159,10 +177,10 @@ Verification completed on 2026-08-26:
 | Metrics endpoint | DONE | `GET /api/metrics` |
 | Audit log | DONE | append-only audit entries in `services/control-api/src/store.mjs` |
 | Split vision-to-analytics bridge | DONE | `edge/vision-runtime/src/simulate-tracks.mjs`, `edge/analytics/src/track-bridge.mjs` |
-| ANPR rule foundation | PARTIAL | `edge/analytics/src/anpr.mjs`; OCR source pending. |
+| ANPR rule foundation | PARTIAL | `edge/analytics/src/anpr.mjs`; optional OCR command adapter present, real crop validation pending. |
 | Suspicious-activity rule foundation | PARTIAL | `edge/analytics/src/suspicious-activity.mjs`; real-world tuning pending. |
 | Virtual-fence policy hardening | DONE | `FenceIncidentPolicy`, class filters, active schedule and cooldown in `edge/analytics/src/virtual-fence.mjs`. |
-| Privacy redaction foundation | PARTIAL | `edge/vision-runtime/src/privacy-redaction.mjs`; no identity recognition or embeddings. |
+| Privacy redaction foundation | PARTIAL | `edge/vision-runtime/src/privacy-redaction.mjs`; optional face detector command adapter present, no identity recognition or embeddings. |
 | Night/tamper analytics foundation | PARTIAL | `edge/analytics/src/night-watch.mjs`; deterministic rules, not field-calibrated claims. |
 | Analytics incident builder | DONE | `edge/analytics/src/incident-builder.mjs` validates generated night/suspicious incidents against contract. |
 | Realtime incident stream | DONE | SSE stream in `services/control-api/src/server.mjs`; dashboard subscribes through `EventSource`. |
@@ -172,6 +190,8 @@ Verification completed on 2026-08-26:
 | Docker Compose development path | PARTIAL | `deploy/compose/compose.yaml` includes env-file and healthcheck; production gateway/TLS still pending. |
 | Field validation harness | DONE | `npm run validation:field` produces auditable JSON report for fixture or real source. |
 | Model/dataset promotion guardrails | DONE | Dataset and model registry templates prevent unsupported accuracy claims. |
+| Real-producer trajectory compatibility | DONE | Bridge accumulates incoming single-point trajectories so real YOLO runtime can trigger fence policy. |
+| Optional OCR/face runtime adapters | PARTIAL | PaddleOCR/OpenCV wrappers and Node command adapters exist; dependencies and field data must be supplied externally. |
 
 ## Current Verification Commands
 
@@ -185,8 +205,8 @@ npm run verify:stable
 - New and rotated device keys are hashed in local JSON; existing legacy plaintext keys are accepted only for backward compatibility until rotation.
 - Operator RBAC foundation exists, but there is no persistent login/session UI, MFA, or TLS/mTLS enforcement yet.
 - Rate limiting is in-memory and single-process only; production should use a shared limiter behind the deployment gateway.
-- Face detection has a privacy-only candidate/redaction foundation; no identity recognition, matching or biometric embeddings are implemented.
-- ANPR has only rule/voting foundations and no OCR model integration yet.
+- Face detection has a privacy-only candidate/redaction foundation and optional detector adapter; no identity recognition, matching or biometric embeddings are implemented.
+- ANPR has rule/voting foundations and an optional OCR adapter; no measured OCR accuracy is claimed.
 - Privacy redaction currently emits blur instructions; production video/image blur rendering still needs frame pipeline integration.
 - Evidence encryption and retention exist for local filesystem artifacts; production object storage/KMS integration is still pending.
 - No measured accuracy, false-alert rate, or camera capacity should be claimed.
