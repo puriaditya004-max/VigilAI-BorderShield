@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import {
+  authenticateOperator,
   createRateLimiter,
   hashDeviceKey,
   issueDeviceKey,
@@ -30,4 +31,23 @@ assert.equal(limiter.check("client-a", 100).allowed, true);
 assert.equal(limiter.check("client-a", 200).allowed, false);
 assert.equal(limiter.check("client-a", 1200).allowed, true);
 
+const operator = authenticateOperator(mockReq({ "x-operator-id": "op-1", "x-operator-role": "OPERATOR" }), {
+  requiredPermission: "incident:acknowledge"
+});
+assert.equal(operator.ok, true);
+
+const viewer = authenticateOperator(mockReq({ "x-operator-id": "viewer-1", "x-operator-role": "VIEWER" }), {
+  requiredPermission: "incident:acknowledge"
+});
+assert.equal(viewer.ok, false);
+assert.equal(viewer.statusCode, 403);
+
+const missing = authenticateOperator(mockReq({}));
+assert.equal(missing.ok, false);
+assert.equal(missing.statusCode, 401);
+
 console.log("PASS control-api-security unit");
+
+function mockReq(headers) {
+  return { headers };
+}

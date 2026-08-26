@@ -5,8 +5,8 @@ import { fileURLToPath } from "node:url";
 import { validateContract, readJson } from "../../../packages/contracts/src/validate-contract.mjs";
 import { verifyEvidenceManifest } from "../../evidence-service/src/manifest.mjs";
 import { appendAudit, ensureStore, readDb, updateDb } from "./store.mjs";
-import { badRequest, notFound, payloadTooLarge, readJsonBody, sendJson, unauthorized, withSecurityHeaders } from "./http.mjs";
-import { clientRateLimitKey, createRateLimiter, hashDeviceKey, issueDeviceKey, publicCamera, publicCameraWithIssuedKey, verifyDeviceKey } from "./security.mjs";
+import { badRequest, forbidden, notFound, payloadTooLarge, readJsonBody, sendJson, unauthorized, withSecurityHeaders } from "./http.mjs";
+import { authenticateOperator, clientRateLimitKey, createRateLimiter, hashDeviceKey, issueDeviceKey, publicCamera, publicCameraWithIssuedKey, verifyDeviceKey } from "./security.mjs";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const root = path.resolve(__dirname, "../../..");
@@ -71,6 +71,15 @@ const server = http.createServer(async (req, res) => {
 
     if (req.method === "POST" && url.pathname === "/api/incidents") {
       return createIncident(req, res, await readJsonBody(req));
+    }
+
+    const incidentActionMatch = url.pathname.match(/^\/api\/incidents\/([^/]+)\/(acknowledge|escalate)$/);
+    if (req.method === "POST" && incidentActionMatch) {
+      return updateIncidentLifecycle(req, res, {
+        incidentId: decodeURIComponent(incidentActionMatch[1]),
+        action: incidentActionMatch[2],
+        body: await readJsonBody(req)
+      });
     }
 
     if (req.method === "GET" && url.pathname === "/api/incidents") {
@@ -204,6 +213,44 @@ function createIncident(req, res, body) {
   });
 
   return sendJson(res, result.created ? 201 : 200, result.incident);
+}
+
+function updateIncidentLifecycle(req, res, { incidentId, action, body }) {
+  const permission = action === "acknowledge" ? "incident:acknowledge" : "incident:escalate";
+  const auth = authenticateOperator(req, { requiredPermission: permission });
+  if (!auth.ok) return auth.statusCode === 403 ? forbidden(res, auth.message) : unauthorized(res, auth.message);
+
+  const result = updateDb((db) => {
+    const incident = db.incidents.find((item) => item.incidentId === incidentId);
+    if (!incident) return { found: false };
+
+    const now = new Date().toISOString();
+    if (action === "acknowledge") {
+      incident.status = "ACKNOWLEDGED";
+      incident.acknowledgedAt = now;
+      incident.acknowledgedBy = auth.operator.operatorId;
+      incident.acknowledgementNote = String(body.note || "").slice(0, 500) || null;
+    } else {
+      incident.status = "ESCALATED";
+      incident.escalatedAt = now;
+      incident.escalatedBy = auth.operator.operatorId;
+      incident.escalationTarget = String(body.target || "command").slice(0, 120);
+      incident.escalationNote = String(body.note || "").slice(0, 500) || null;
+    }
+
+    const auditAction = action === "acknowledge" ? "incident.acknowledged" : "incident.escalated";
+    appendAudit(db, {
+      actor: auth.operator.operatorId,
+      action: auditAction,
+      resource: incident.incidentId,
+      requestId: req.headers["idempotency-key"]
+    });
+    publishEvent(auditAction, incident);
+    return { found: true, incident };
+  });
+
+  if (!result.found) return notFound(res);
+  return sendJson(res, 200, result.incident);
 }
 
 function createEvidenceManifest(req, res, body) {

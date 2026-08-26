@@ -1,4 +1,9 @@
 const API_BASE = "";
+const OPERATOR = {
+  id: localStorage.getItem("vigilai.operatorId") || "local-operator",
+  role: localStorage.getItem("vigilai.operatorRole") || "COMMANDER",
+  token: localStorage.getItem("vigilai.operatorToken") || ""
+};
 
 const els = {
   refreshButton: document.querySelector("#refreshButton"),
@@ -15,6 +20,7 @@ const els = {
 };
 
 els.refreshButton.addEventListener("click", refresh);
+els.incidentList.addEventListener("click", handleIncidentAction);
 refresh();
 connectEventStream();
 setInterval(refresh, 30000);
@@ -55,6 +61,12 @@ function connectEventStream() {
   stream.addEventListener("incident.created", () => {
     refresh();
   });
+  stream.addEventListener("incident.acknowledged", () => {
+    refresh();
+  });
+  stream.addEventListener("incident.escalated", () => {
+    refresh();
+  });
   stream.onerror = () => {
     els.apiStatus.textContent = "Reconnecting";
     els.apiStatus.dataset.state = "degraded";
@@ -63,6 +75,24 @@ function connectEventStream() {
 
 async function getJson(path) {
   const response = await fetch(`${API_BASE}${path}`);
+  if (!response.ok) throw new Error(`${path} ${response.status}`);
+  return response.json();
+}
+
+async function postJson(path, body) {
+  const headers = {
+    "content-type": "application/json",
+    "x-operator-id": OPERATOR.id,
+    "x-operator-role": OPERATOR.role,
+    "idempotency-key": `ui-${Date.now()}-${Math.random().toString(16).slice(2)}`
+  };
+  if (OPERATOR.token) headers.authorization = `Bearer ${OPERATOR.token}`;
+
+  const response = await fetch(`${API_BASE}${path}`, {
+    method: "POST",
+    headers,
+    body: JSON.stringify(body)
+  });
   if (!response.ok) throw new Error(`${path} ${response.status}`);
   return response.json();
 }
@@ -95,8 +125,45 @@ function renderIncidents(incidents) {
         <div><dt>Evidence SHA</dt><dd>${escapeHtml(incident.evidence.sha256.slice(0, 18))}...</dd></div>
         <div><dt>Captured</dt><dd>${formatTime(incident.captureTime)}</dd></div>
       </dl>
+      ${renderIncidentActions(incident)}
     </article>
   `).join("");
+}
+
+function renderIncidentActions(incident) {
+  if (incident.status === "ACKNOWLEDGED") {
+    return `<div class="incident-actions handled">Acknowledged by ${escapeHtml(incident.acknowledgedBy || "operator")}</div>`;
+  }
+  if (incident.status === "ESCALATED") {
+    return `<div class="incident-actions handled">Escalated to ${escapeHtml(incident.escalationTarget || "command")}</div>`;
+  }
+
+  return `
+    <div class="incident-actions">
+      <button type="button" data-action="acknowledge" data-incident-id="${escapeHtml(incident.incidentId)}">Acknowledge</button>
+      <button type="button" data-action="escalate" data-incident-id="${escapeHtml(incident.incidentId)}">Escalate</button>
+    </div>
+  `;
+}
+
+async function handleIncidentAction(event) {
+  const button = event.target.closest("button[data-action][data-incident-id]");
+  if (!button) return;
+
+  button.disabled = true;
+  const action = button.dataset.action;
+  const incidentId = button.dataset.incidentId;
+  try {
+    await postJson(`/api/incidents/${encodeURIComponent(incidentId)}/${action}`, {
+      note: action === "acknowledge" ? "Acknowledged from command UI" : "Escalated from command UI",
+      target: "sector-command"
+    });
+    await refresh();
+  } catch (error) {
+    els.apiStatus.textContent = error.message;
+    els.apiStatus.dataset.state = "degraded";
+    button.disabled = false;
+  }
 }
 
 function renderCameras(cameras) {

@@ -58,6 +58,10 @@ export function unauthorized(res, message = "invalid device credentials") {
   sendJson(res, 401, { error: "unauthorized", message });
 }
 
+export function forbidden(res, message = "forbidden") {
+  sendJson(res, 403, { error: "forbidden", message });
+}
+
 export function payloadTooLarge(res, message = "request body too large") {
   sendJson(res, 413, { error: "payload_too_large", message });
 }

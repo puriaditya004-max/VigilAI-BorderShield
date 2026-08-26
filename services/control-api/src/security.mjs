@@ -59,3 +59,39 @@ export function clientRateLimitKey(req) {
   const forwardedFor = String(req.headers["x-forwarded-for"] || "").split(",")[0].trim();
   return forwardedFor || req.socket?.remoteAddress || "unknown-client";
 }
+
+const ROLE_PERMISSIONS = {
+  VIEWER: new Set(["incident:read"]),
+  OPERATOR: new Set(["incident:read", "incident:acknowledge"]),
+  COMMANDER: new Set(["incident:read", "incident:acknowledge", "incident:escalate"])
+};
+
+export function authenticateOperator(req, { requiredPermission } = {}) {
+  const operatorId = String(req.headers["x-operator-id"] || "").trim();
+  const role = String(req.headers["x-operator-role"] || "VIEWER").trim().toUpperCase();
+  const configuredToken = process.env.OPERATOR_TOKEN;
+
+  if (!operatorId) return { ok: false, statusCode: 401, message: "x-operator-id header is required" };
+  if (!ROLE_PERMISSIONS[role]) return { ok: false, statusCode: 403, message: "operator role is not allowed" };
+
+  if (configuredToken) {
+    const provided = String(req.headers.authorization || "").replace(/^Bearer\s+/i, "");
+    if (!constantTimeTextEqual(provided, configuredToken)) {
+      return { ok: false, statusCode: 401, message: "operator token mismatch" };
+    }
+  }
+
+  const permissions = ROLE_PERMISSIONS[role];
+  if (requiredPermission && !permissions.has(requiredPermission)) {
+    return { ok: false, statusCode: 403, message: "operator permission denied" };
+  }
+
+  return { ok: true, operator: { operatorId, role, permissions: [...permissions] } };
+}
+
+function constantTimeTextEqual(left, right) {
+  if (!left || !right) return false;
+  const leftBuffer = Buffer.from(left);
+  const rightBuffer = Buffer.from(right);
+  return leftBuffer.length === rightBuffer.length && crypto.timingSafeEqual(leftBuffer, rightBuffer);
+}

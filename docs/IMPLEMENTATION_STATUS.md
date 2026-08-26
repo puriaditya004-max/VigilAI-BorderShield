@@ -40,8 +40,8 @@ Verification completed on 2026-08-26:
 | Virtual-fence intrusion | DONE | `edge/analytics/src/virtual-fence.mjs`, `edge/analytics/config/zones.json`, tested by unit/integration/e2e. |
 | Suspicious-activity analytics | PARTIAL | Rule foundations for loitering, repeated boundary approach, crowd formation and sudden speed change in `edge/analytics/src/suspicious-activity.mjs`; no measured field tuning yet. |
 | Night-movement analytics | PARTIAL | Low-light quality assessment, night movement rule and tamper rules in `edge/analytics/src/night-watch.mjs`; camera-specific tuning pending. |
-| Real-time alerting and event logging | PARTIAL | Incident/audit flow plus SSE incident stream at `/api/events`; operator acknowledgement workflow pending. |
-| Command-and-control dashboard | PARTIAL | Static dashboard consumes live SSE incident updates with polling fallback; React/TypeScript HMI not implemented. |
+| Real-time alerting and event logging | PARTIAL | Incident/audit flow plus SSE incident stream and operator lifecycle updates; full notification escalation pending. |
+| Command-and-control dashboard | PARTIAL | Static dashboard consumes live SSE incident updates, supports acknowledge/escalate actions and keeps polling fallback; React/TypeScript HMI not implemented. |
 | Existing CCTV/RTSP compatibility | PARTIAL | Python runtime accepts OpenCV sources including RTSP; ONVIF discovery not implemented. |
 | Offline edge operation and synchronization | PARTIAL | Durable JSON outbox and replay in `edge/edge-agent/src/outbox.mjs`; no encrypted rolling buffer. |
 | Accuracy/performance evaluation | BLOCKED | Labelled dataset and measured hardware unavailable; no accuracy claims made. |
@@ -104,8 +104,21 @@ Verification completed on 2026-08-26:
 | API rate limiting | PARTIAL | In-memory per-client limiter in `services/control-api/src/security.mjs`; production distributed store pending. |
 | Hashed device-key storage | DONE | New/rotated camera keys are stored as SHA-256 hashes; plaintext key is returned only on issuance. |
 | Public camera response redaction | DONE | `GET /api/cameras` removes `deviceKey` and `deviceKeyHash` fields. |
-| Operator auth and RBAC | NOT STARTED | No operator login/session/role middleware yet. |
+| Operator auth and RBAC | PARTIAL | Header/token-based operator foundation with VIEWER/OPERATOR/COMMANDER permissions; persistent login/session UI pending. |
 | TLS or mTLS enforcement | BLOCKED | Requires deployment certificates and reverse proxy/runtime configuration. |
+
+## Phase 5 - Operator Incident Workflow
+
+| Requirement | Status | Evidence |
+|---|---|---|
+| Operator identity on actions | DONE | `authenticateOperator()` requires `x-operator-id` and records actor in audit events. |
+| Role-based permissions | DONE | VIEWER, OPERATOR and COMMANDER permissions in `services/control-api/src/security.mjs`, covered by `tests/unit/control-api-security.test.mjs`. |
+| Optional operator bearer token | PARTIAL | `OPERATOR_TOKEN` enforces bearer token when configured; full login/session issuance pending. |
+| Incident acknowledgement | DONE | `POST /api/incidents/:incidentId/acknowledge` sets status, actor, timestamp and audit entry. |
+| Incident escalation | DONE | `POST /api/incidents/:incidentId/escalate` sets status, target, actor, timestamp and audit entry. |
+| Lifecycle realtime events | DONE | Acknowledge/escalate actions publish SSE events consumed by the dashboard. |
+| Dashboard command actions | DONE | Incident cards show acknowledge/escalate buttons for open incidents. |
+| Human-in-the-loop critical alert handling | PARTIAL | Critical incidents can be acknowledged/escalated by operators; formal SLA/escalation policy pending. |
 
 ## Implemented Foundation
 
@@ -128,7 +141,8 @@ Verification completed on 2026-08-26:
 | Night/tamper analytics foundation | PARTIAL | `edge/analytics/src/night-watch.mjs`; deterministic rules, not field-calibrated claims. |
 | Analytics incident builder | DONE | `edge/analytics/src/incident-builder.mjs` validates generated night/suspicious incidents against contract. |
 | Realtime incident stream | DONE | SSE stream in `services/control-api/src/server.mjs`; dashboard subscribes through `EventSource`. |
-| API security helpers | PARTIAL | `services/control-api/src/security.mjs` covers hashed device keys and in-memory rate limits; RBAC pending. |
+| API security helpers | PARTIAL | `services/control-api/src/security.mjs` covers hashed device keys, in-memory rate limits and operator RBAC foundation. |
+| Incident acknowledgement workflow | DONE | API/UI support acknowledge and escalate actions with audit trail and SSE refresh. |
 | Docker Compose development path | PARTIAL | `deploy/compose/compose.yaml`; production hardening pending. |
 
 ## Current Verification Commands
@@ -141,7 +155,7 @@ npm run verify:stable
 ## Known Security and Privacy Limitations
 
 - New and rotated device keys are hashed in local JSON; existing legacy plaintext keys are accepted only for backward compatibility until rotation.
-- No operator login, RBAC, MFA, or TLS/mTLS enforcement yet.
+- Operator RBAC foundation exists, but there is no persistent login/session UI, MFA, or TLS/mTLS enforcement yet.
 - Rate limiting is in-memory and single-process only; production should use a shared limiter behind the deployment gateway.
 - Face detection has a privacy-only candidate/redaction foundation; no identity recognition, matching or biometric embeddings are implemented.
 - ANPR has only rule/voting foundations and no OCR model integration yet.
@@ -151,4 +165,4 @@ npm run verify:stable
 
 ## Next Highest-Priority Phase
 
-Next priority should add operator workflows and evidence lifecycle controls: login/session auth, RBAC, incident acknowledgement/escalation, retention-policy cleanup, and encrypted evidence storage.
+Next priority should add evidence lifecycle controls and deployment hardening: retention-policy cleanup, encrypted evidence storage, production environment templates, healthchecks and deployment runbooks.

@@ -200,6 +200,28 @@ dd {
   color: var(--text);
 }
 
+.incident-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid var(--line);
+}
+
+.incident-actions button {
+  min-height: 34px;
+}
+
+.incident-actions button[data-action="escalate"] {
+  border-color: color-mix(in srgb, var(--danger), transparent 45%);
+}
+
+.incident-actions.handled {
+  color: var(--muted);
+  font-size: 12px;
+}
+
 .row {
   padding: 11px;
 }
