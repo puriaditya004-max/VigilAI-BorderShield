@@ -40,8 +40,8 @@ Verification completed on 2026-08-26:
 | Virtual-fence intrusion | DONE | `edge/analytics/src/virtual-fence.mjs`, `edge/analytics/config/zones.json`, tested by unit/integration/e2e. |
 | Suspicious-activity analytics | PARTIAL | Rule foundations for loitering, repeated boundary approach, crowd formation and sudden speed change in `edge/analytics/src/suspicious-activity.mjs`; no measured field tuning yet. |
 | Night-movement analytics | PARTIAL | Low-light quality assessment, night movement rule and tamper rules in `edge/analytics/src/night-watch.mjs`; camera-specific tuning pending. |
-| Real-time alerting and event logging | PARTIAL | Control API incident/audit flow exists; no WebSocket/SSE yet. |
-| Command-and-control dashboard | PARTIAL | Static dashboard in `apps/command-ui/public/`; React/TypeScript HMI not implemented. |
+| Real-time alerting and event logging | PARTIAL | Incident/audit flow plus SSE incident stream at `/api/events`; operator acknowledgement workflow pending. |
+| Command-and-control dashboard | PARTIAL | Static dashboard consumes live SSE incident updates with polling fallback; React/TypeScript HMI not implemented. |
 | Existing CCTV/RTSP compatibility | PARTIAL | Python runtime accepts OpenCV sources including RTSP; ONVIF discovery not implemented. |
 | Offline edge operation and synchronization | PARTIAL | Durable JSON outbox and replay in `edge/edge-agent/src/outbox.mjs`; no encrypted rolling buffer. |
 | Accuracy/performance evaluation | BLOCKED | Labelled dataset and measured hardware unavailable; no accuracy claims made. |
@@ -92,6 +92,21 @@ Verification completed on 2026-08-26:
 | Camera tamper rule | PARTIAL | `detectFrameTamper()` covers signal loss, occlusion, blackout and blur/defocus heuristics. |
 | Rule-to-incident mapping | DONE | `edge/analytics/src/incident-builder.mjs` maps night and suspicious decisions to `incident-event.v1`, covered by contract validation. |
 
+## Phase 4 - Realtime API and Security Hardening
+
+| Requirement | Status | Evidence |
+|---|---|---|
+| Realtime incident delivery | DONE | `GET /api/events` emits Server-Sent Events; `tests/integration/realtime-events.mjs` verifies incident delivery. |
+| Dashboard live updates | DONE | `apps/command-ui/public/main.js` uses `EventSource` for live incident refresh with polling fallback. |
+| Security headers | DONE | `withSecurityHeaders()` applies `nosniff`, frame denial, no-referrer and resource policy to JSON/static/SSE responses. |
+| Request body size limits | DONE | `readJsonBody()` enforces configurable `MAX_JSON_BODY_BYTES` and returns 413 on oversized payloads. |
+| Invalid JSON handling | DONE | Invalid request JSON returns 400; covered by `tests/integration/control-api-hardening.mjs`. |
+| API rate limiting | PARTIAL | In-memory per-client limiter in `services/control-api/src/security.mjs`; production distributed store pending. |
+| Hashed device-key storage | DONE | New/rotated camera keys are stored as SHA-256 hashes; plaintext key is returned only on issuance. |
+| Public camera response redaction | DONE | `GET /api/cameras` removes `deviceKey` and `deviceKeyHash` fields. |
+| Operator auth and RBAC | NOT STARTED | No operator login/session/role middleware yet. |
+| TLS or mTLS enforcement | BLOCKED | Requires deployment certificates and reverse proxy/runtime configuration. |
+
 ## Implemented Foundation
 
 | Area | Status | Evidence |
@@ -112,6 +127,8 @@ Verification completed on 2026-08-26:
 | Privacy redaction foundation | PARTIAL | `edge/vision-runtime/src/privacy-redaction.mjs`; no identity recognition or embeddings. |
 | Night/tamper analytics foundation | PARTIAL | `edge/analytics/src/night-watch.mjs`; deterministic rules, not field-calibrated claims. |
 | Analytics incident builder | DONE | `edge/analytics/src/incident-builder.mjs` validates generated night/suspicious incidents against contract. |
+| Realtime incident stream | DONE | SSE stream in `services/control-api/src/server.mjs`; dashboard subscribes through `EventSource`. |
+| API security helpers | PARTIAL | `services/control-api/src/security.mjs` covers hashed device keys and in-memory rate limits; RBAC pending. |
 | Docker Compose development path | PARTIAL | `deploy/compose/compose.yaml`; production hardening pending. |
 
 ## Current Verification Commands
@@ -123,8 +140,9 @@ npm run verify:stable
 
 ## Known Security and Privacy Limitations
 
-- Device keys are stored in local JSON for development; production must store hashed keys.
-- No operator login, RBAC, MFA, rate limiting, or TLS/mTLS enforcement yet.
+- New and rotated device keys are hashed in local JSON; existing legacy plaintext keys are accepted only for backward compatibility until rotation.
+- No operator login, RBAC, MFA, or TLS/mTLS enforcement yet.
+- Rate limiting is in-memory and single-process only; production should use a shared limiter behind the deployment gateway.
 - Face detection has a privacy-only candidate/redaction foundation; no identity recognition, matching or biometric embeddings are implemented.
 - ANPR has only rule/voting foundations and no OCR model integration yet.
 - Privacy redaction currently emits blur instructions; production video/image blur rendering still needs frame pipeline integration.
@@ -133,4 +151,4 @@ npm run verify:stable
 
 ## Next Highest-Priority Phase
 
-Next priority should add real-time operator delivery and production security: SSE/WebSocket alert streaming, operator auth/RBAC, hashed device keys, rate limiting, and retention-policy enforcement for evidence.
+Next priority should add operator workflows and evidence lifecycle controls: login/session auth, RBAC, incident acknowledgement/escalation, retention-policy cleanup, and encrypted evidence storage.

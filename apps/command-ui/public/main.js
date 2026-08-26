@@ -16,7 +16,8 @@ const els = {
 
 els.refreshButton.addEventListener("click", refresh);
 refresh();
-setInterval(refresh, 5000);
+connectEventStream();
+setInterval(refresh, 30000);
 
 async function refresh() {
   try {
@@ -41,6 +42,23 @@ async function refresh() {
     els.apiStatus.dataset.state = "offline";
     els.incidentList.innerHTML = `<div class="empty">Control API unavailable: ${escapeHtml(error.message)}</div>`;
   }
+}
+
+function connectEventStream() {
+  if (!("EventSource" in window)) return;
+
+  const stream = new EventSource(`${API_BASE}/api/events`);
+  stream.addEventListener("ready", () => {
+    els.apiStatus.textContent = "Live";
+    els.apiStatus.dataset.state = "online";
+  });
+  stream.addEventListener("incident.created", () => {
+    refresh();
+  });
+  stream.onerror = () => {
+    els.apiStatus.textContent = "Reconnecting";
+    els.apiStatus.dataset.state = "degraded";
+  };
 }
 
 async function getJson(path) {

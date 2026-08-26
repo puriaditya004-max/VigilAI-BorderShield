@@ -140,6 +140,11 @@ button {
   border-color: color-mix(in srgb, var(--danger), transparent 55%);
 }
 
+.status[data-state="degraded"] {
+  color: var(--warn);
+  border-color: color-mix(in srgb, var(--warn), transparent 55%);
+}
+
 .list {
   display: grid;
   gap: 10px;

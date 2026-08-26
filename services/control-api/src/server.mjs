@@ -1,4 +1,3 @@
-import crypto from "node:crypto";
 import fs from "node:fs";
 import http from "node:http";
 import path from "node:path";
@@ -6,12 +5,18 @@ import { fileURLToPath } from "node:url";
 import { validateContract, readJson } from "../../../packages/contracts/src/validate-contract.mjs";
 import { verifyEvidenceManifest } from "../../evidence-service/src/manifest.mjs";
 import { appendAudit, ensureStore, readDb, updateDb } from "./store.mjs";
-import { badRequest, notFound, readJsonBody, sendJson, unauthorized } from "./http.mjs";
+import { badRequest, notFound, payloadTooLarge, readJsonBody, sendJson, unauthorized, withSecurityHeaders } from "./http.mjs";
+import { clientRateLimitKey, createRateLimiter, hashDeviceKey, issueDeviceKey, publicCamera, publicCameraWithIssuedKey, verifyDeviceKey } from "./security.mjs";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const root = path.resolve(__dirname, "../../..");
 const PORT = Number(process.env.PORT || 7080);
 const uiDir = path.join(root, "apps/command-ui/public");
+const rateLimiter = createRateLimiter({
+  windowMs: Number(process.env.RATE_LIMIT_WINDOW_MS || 60000),
+  maxRequests: Number(process.env.RATE_LIMIT_MAX || 240)
+});
+const eventClients = new Set();
 
 const schemas = {
   incident: readJson(path.join(root, "packages/contracts/schemas/incident-event.schema.json")),
@@ -23,6 +28,11 @@ ensureStore();
 
 const server = http.createServer(async (req, res) => {
   try {
+    const rate = rateLimiter.check(clientRateLimitKey(req));
+    if (!rate.allowed) {
+      return sendJson(res, 429, { error: "rate_limited", retryAfterMs: Math.max(0, rate.resetAt - Date.now()) });
+    }
+
     if (req.method === "OPTIONS") return sendJson(res, 204, {});
 
     const url = new URL(req.url, `http://${req.headers.host}`);
@@ -33,6 +43,10 @@ const server = http.createServer(async (req, res) => {
 
     if (req.method === "GET" && url.pathname === "/health") {
       return sendJson(res, 200, { status: "ok", service: "control-api", time: new Date().toISOString() });
+    }
+
+    if (req.method === "GET" && url.pathname === "/api/events") {
+      return openEventStream(req, res);
     }
 
     if (req.method === "POST" && url.pathname === "/api/cameras/register") {
@@ -48,7 +62,7 @@ const server = http.createServer(async (req, res) => {
     }
 
     if (req.method === "GET" && url.pathname === "/api/cameras") {
-      return sendJson(res, 200, readDb().cameras);
+      return sendJson(res, 200, readDb().cameras.map(publicCamera));
     }
 
     if (req.method === "GET" && url.pathname === "/api/zones") {
@@ -82,6 +96,8 @@ const server = http.createServer(async (req, res) => {
     return notFound(res);
   } catch (error) {
     console.error(error);
+    if (error.statusCode === 400) return badRequest(res, error.message);
+    if (error.statusCode === 413) return payloadTooLarge(res, error.message);
     return sendJson(res, 500, { error: "internal_error", message: error.message });
   }
 });
@@ -96,6 +112,7 @@ function registerCamera(req, res, body) {
     return badRequest(res, "cameraId, name and edgeNodeId are required");
   }
 
+  const issuedKey = issueDeviceKey();
   const result = updateDb((db) => {
     let camera = db.cameras.find((item) => item.cameraId === cameraId);
     if (!camera) {
@@ -105,7 +122,7 @@ function registerCamera(req, res, body) {
         edgeNodeId,
         location: location || "unknown",
         streamUri: streamUri || null,
-        deviceKey: `dev_${crypto.randomBytes(24).toString("hex")}`,
+        deviceKeyHash: hashDeviceKey(issuedKey),
         status: "ONLINE",
         registeredAt: new Date().toISOString(),
         lastHeartbeat: new Date().toISOString()
@@ -113,11 +130,13 @@ function registerCamera(req, res, body) {
       db.cameras.push(camera);
       appendAudit(db, { actor: edgeNodeId, action: "camera.registered", resource: cameraId, requestId: req.headers["idempotency-key"] });
     } else {
+      camera.deviceKeyHash = hashDeviceKey(issuedKey);
+      delete camera.deviceKey;
       camera.status = "ONLINE";
       camera.lastHeartbeat = new Date().toISOString();
-      appendAudit(db, { actor: edgeNodeId, action: "camera.reconnected", resource: cameraId, requestId: req.headers["idempotency-key"] });
+      appendAudit(db, { actor: edgeNodeId, action: "camera.reconnected_key_issued", resource: cameraId, requestId: req.headers["idempotency-key"] });
     }
-    return camera;
+    return publicCameraWithIssuedKey(camera, issuedKey);
   });
 
   return sendJson(res, 200, result);
@@ -147,12 +166,14 @@ function rotateCameraKey(req, res, body) {
   const auth = authenticateCamera(req, body.cameraId);
   if (!auth.ok) return unauthorized(res, auth.message);
 
+  const issuedKey = issueDeviceKey();
   const result = updateDb((db) => {
     const camera = db.cameras.find((item) => item.cameraId === body.cameraId);
-    camera.deviceKey = `dev_${crypto.randomBytes(24).toString("hex")}`;
+    camera.deviceKeyHash = hashDeviceKey(issuedKey);
+    delete camera.deviceKey;
     camera.keyRotatedAt = new Date().toISOString();
     appendAudit(db, { actor: body.cameraId, action: "camera.key_rotated", resource: body.cameraId, requestId: req.headers["idempotency-key"] });
-    return camera;
+    return publicCameraWithIssuedKey(camera, issuedKey);
   });
 
   return sendJson(res, 200, result);
@@ -178,6 +199,7 @@ function createIncident(req, res, body) {
     };
     db.incidents.push(incident);
     appendAudit(db, { actor: body.cameraId, action: "incident.created", resource: body.incidentId, requestId: idempotencyKey });
+    publishEvent("incident.created", incident);
     return { incident, created: true };
   });
 
@@ -220,7 +242,9 @@ function authenticateCamera(req, cameraId) {
 
   const camera = readDb().cameras.find((item) => item.cameraId === cameraId);
   if (!camera) return { ok: false, message: "camera is not registered" };
-  if (camera.deviceKey !== deviceKey) return { ok: false, message: "device key mismatch" };
+  if (!verifyDeviceKey({ providedKey: deviceKey, storedHash: camera.deviceKeyHash, legacyPlaintextKey: camera.deviceKey })) {
+    return { ok: false, message: "device key mismatch" };
+  }
   return { ok: true, camera };
 }
 
@@ -235,8 +259,29 @@ function serveStaticUi(res, pathname) {
       : ext === ".css" ? "text/css; charset=utf-8"
         : "application/octet-stream";
 
-  res.writeHead(200, { "content-type": contentType });
+  res.writeHead(200, withSecurityHeaders({ "content-type": contentType }));
   res.end(fs.readFileSync(filePath));
+}
+
+function openEventStream(req, res) {
+  res.writeHead(200, withSecurityHeaders({
+    "content-type": "text/event-stream; charset=utf-8",
+    "cache-control": "no-cache, no-transform",
+    "connection": "keep-alive",
+    "access-control-allow-origin": "*"
+  }));
+  res.write(`event: ready\ndata: ${JSON.stringify({ time: new Date().toISOString() })}\n\n`);
+
+  const client = { res };
+  eventClients.add(client);
+  req.on("close", () => eventClients.delete(client));
+}
+
+function publishEvent(eventName, payload) {
+  const message = `event: ${eventName}\ndata: ${JSON.stringify(payload)}\n\n`;
+  for (const client of eventClients) {
+    client.res.write(message);
+  }
 }
 
 function buildMetrics(db) {
