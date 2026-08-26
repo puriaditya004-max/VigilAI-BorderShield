@@ -44,7 +44,7 @@ Verification completed on 2026-08-26:
 | Command-and-control dashboard | PARTIAL | Static dashboard consumes live SSE incident updates, supports acknowledge/escalate actions and keeps polling fallback; React/TypeScript HMI not implemented. |
 | Existing CCTV/RTSP compatibility | PARTIAL | Python runtime accepts OpenCV sources including RTSP; ONVIF discovery not implemented. |
 | Offline edge operation and synchronization | PARTIAL | Durable JSON outbox and replay in `edge/edge-agent/src/outbox.mjs`; evidence encryption is optional, encrypted rolling video buffer pending. |
-| Accuracy/performance evaluation | BLOCKED | Labelled dataset and measured hardware unavailable; no accuracy claims made. |
+| Accuracy/performance evaluation | PARTIAL | `npm run validation:field` generates fixture/real-source validation reports with explicit not-measured accuracy fields; labelled dataset and hardware still required for claims. |
 
 ## Phase 1 - Real Camera and Video Ingestion
 
@@ -134,6 +134,17 @@ Verification completed on 2026-08-26:
 | Deployment runbook | DONE | `docs/runbooks/README.md` documents smoke tests, operator workflow and retention procedure. |
 | Production TLS/mTLS | BLOCKED | Requires deployment gateway/certificates. |
 
+## Phase 7 - Validation and Promotion Readiness
+
+| Requirement | Status | Evidence |
+|---|---|---|
+| Repeatable field validation harness | DONE | `tests/performance/field-validation.mjs` runs the producer-to-bridge-to-API path and writes a JSON report. |
+| Real-source validation command | DONE | `npm run validation:field -- --source <camera|rtsp|video> --model <model>` is documented. |
+| Accuracy claim guardrails | DONE | Validation report keeps precision, recall and false-alert rate as `not_measured_without_labelled_dataset` until labelled data is supplied. |
+| Dataset manifest template | DONE | `ml/datasets/README.md` documents slices, privacy fields and label counts. |
+| Model promotion template | DONE | `ml/model-registry/README.md` documents model card, checksum, metrics and rollback gate. |
+| Production model promotion | BLOCKED | Requires real model artifacts, labelled validation footage and approval. |
+
 ## Implemented Foundation
 
 | Area | Status | Evidence |
@@ -159,6 +170,8 @@ Verification completed on 2026-08-26:
 | Incident acknowledgement workflow | DONE | API/UI support acknowledge and escalate actions with audit trail and SSE refresh. |
 | Evidence lifecycle controls | DONE | Optional encryption plus API/CLI retention cleanup with audit trail. |
 | Docker Compose development path | PARTIAL | `deploy/compose/compose.yaml` includes env-file and healthcheck; production gateway/TLS still pending. |
+| Field validation harness | DONE | `npm run validation:field` produces auditable JSON report for fixture or real source. |
+| Model/dataset promotion guardrails | DONE | Dataset and model registry templates prevent unsupported accuracy claims. |
 
 ## Current Verification Commands
 
@@ -180,4 +193,4 @@ npm run verify:stable
 
 ## Next Highest-Priority Phase
 
-Next priority should validate with real RTSP/USB camera footage and model assets: ANPR OCR integration, face detector integration, pixel blur rendering, performance baselines and measured accuracy/false-alert reporting.
+Next priority requires external inputs: real RTSP/USB camera footage, ANPR/face model assets, labelled validation data and deployment certificates for TLS/mTLS. Without those, no further accuracy or field-readiness claims should be made.

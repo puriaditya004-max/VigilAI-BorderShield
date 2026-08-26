@@ -39,6 +39,26 @@ python edge/vision-runtime/python/yolo_track_runtime.py --source 0 --max-frames 
 
 Use an RTSP URL in place of `0` for an IP camera. The Python process emits `TrackEvent` JSON lines; the Node bridge owns policy decisions, evidence, sync and replay.
 
+## Field Validation Report
+
+Run a fixture-backed validation report:
+
+```bash
+npm run validation:field
+```
+
+Run a real-source validation report:
+
+```bash
+npm run validation:field -- --source 0 --model yolov8n.pt --max-frames 200 --report reports/field-validation.json
+```
+
+Expected result:
+
+- JSON report includes camera, incident, evidence and audit counts
+- pipeline exit codes are recorded
+- accuracy fields remain `not_measured_without_labelled_dataset` until labelled footage is supplied
+
 ## Evidence Retention Run
 
 1. Configure retention:
