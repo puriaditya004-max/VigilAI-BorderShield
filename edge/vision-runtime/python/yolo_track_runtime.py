@@ -135,6 +135,21 @@ def model_checksum(model_path):
     return "sha256:unverified-local-model"
 
 
+def calculate_frame_stats(frame, cv2):
+    gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+    brightness = float(gray.mean()) / 255.0
+    contrast = float(gray.std()) / 255.0
+    sharpness = min(1.0, float(cv2.Laplacian(gray, cv2.CV_64F).var()) / 1000.0)
+    blocked_ratio = float(((gray <= 8) | (gray >= 247)).sum()) / float(gray.size)
+    return {
+        "brightness": round(max(0.0, min(1.0, brightness)), 3),
+        "contrast": round(max(0.0, min(1.0, contrast)), 3),
+        "sharpness": round(max(0.0, min(1.0, sharpness)), 3),
+        "blockedRatio": round(max(0.0, min(1.0, blocked_ratio)), 3),
+        "signalLost": False
+    }
+
+
 def track_event(camera_id, detection, model_name, frame_meta=None):
     x1, y1, x2, y2 = detection["xyxy"]
     capture_time = iso_now()
@@ -163,6 +178,8 @@ def track_event(camera_id, detection, model_name, frame_meta=None):
     if transform:
         event["coordinateSpace"] = transform
         event["sourceBbox"] = source_bbox
+    if detection.get("frame_analysis"):
+        event["frameAnalysis"] = detection["frame_analysis"]
     if frame_meta:
         event["frame"] = frame_meta
     return event
@@ -220,6 +237,7 @@ def main():
               flush=True
           )
 
+      frame_analysis = calculate_frame_stats(frame, cv2)
       results = model.track(frame, persist=True, verbose=False, conf=args.confidence)[0]
       if results.boxes is None:
           continue
@@ -235,7 +253,8 @@ def main():
               "confidence": float(box.conf[0]),
               "xyxy": [float(v) for v in box.xyxy[0]],
               "coordinate_transform": coordinate_transform,
-              "model_checksum": checksum
+              "model_checksum": checksum,
+              "frame_analysis": frame_analysis
           }
           if has_ids and box.id is not None:
               detection["track_id"] = int(box.id[0])

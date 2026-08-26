@@ -11,7 +11,7 @@
     "incidentId": { "type": "string", "minLength": 8 },
     "cameraId": { "type": "string", "minLength": 3 },
     "zoneId": { "type": "string", "minLength": 3 },
-    "type": { "enum": ["VIRTUAL_FENCE_INTRUSION", "NIGHT_MOVEMENT", "SUSPICIOUS_ACTIVITY", "ANPR_CANDIDATE", "FACE_CANDIDATE"] },
+    "type": { "enum": ["VIRTUAL_FENCE_INTRUSION", "NIGHT_MOVEMENT", "CAMERA_TAMPER", "SUSPICIOUS_ACTIVITY", "ANPR_CANDIDATE", "FACE_CANDIDATE"] },
     "severity": { "enum": ["LOW", "MEDIUM", "HIGH", "CRITICAL"] },
     "reasonCodes": {
       "type": "array",

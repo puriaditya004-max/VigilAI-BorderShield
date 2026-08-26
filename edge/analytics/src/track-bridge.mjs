@@ -3,6 +3,14 @@ import path from "node:path";
 import readline from "node:readline";
 import { fileURLToPath } from "node:url";
 import { createTextEvidence } from "./evidence.mjs";
+import { buildAnalyticsIncident } from "./incident-builder.mjs";
+import {
+  detectCrowdFormation,
+  detectLoitering,
+  detectRepeatedBoundaryApproach,
+  detectSuddenSpeedChange
+} from "./suspicious-activity.mjs";
+import { detectFrameTamper, detectNightMovement } from "./night-watch.mjs";
 import { buildIntrusionIncident, crossedFence, FenceIncidentPolicy } from "./virtual-fence.mjs";
 import { registerCamera, sendEvidence, sendHealth, sendIncident } from "./control-client.mjs";
 import { enqueueIncident, replayOutbox } from "../../edge-agent/src/outbox.mjs";
@@ -11,16 +19,24 @@ const API_BASE = process.env.CONTROL_API_URL || "http://localhost:7080";
 const cameraConfigPath = process.env.CAMERA_CONFIG || "edge/edge-agent/config/camera.json";
 const zonesConfigPath = process.env.ZONES_CONFIG || "edge/analytics/config/zones.json";
 const TRAJECTORY_HISTORY_POINTS = Number(process.env.TRACK_TRAJECTORY_HISTORY_POINTS || 20);
+const TRACK_STATE_TTL_MS = Number(process.env.ANALYTICS_TRACK_STATE_TTL_MS || 5 * 60 * 1000);
 
-export async function runTrackBridge({ input = process.stdin, endpoint = API_BASE } = {}) {
-  const camera = JSON.parse(fs.readFileSync(cameraConfigPath, "utf8"));
-  const zones = JSON.parse(fs.readFileSync(zonesConfigPath, "utf8"));
+export async function runTrackBridge({
+  input = process.stdin,
+  endpoint = API_BASE,
+  cameraConfig = cameraConfigPath,
+  zonesConfig = zonesConfigPath
+} = {}) {
+  const camera = JSON.parse(fs.readFileSync(cameraConfig, "utf8"));
+  const zones = JSON.parse(fs.readFileSync(zonesConfig, "utf8"));
   const registered = await registerCamera({ endpoint, camera });
   await sendHealth({ endpoint, camera, deviceKey: registered.deviceKey });
 
   const emitted = [];
   const crossingState = new Map();
   const trajectoryHistory = new Map();
+  const latestTracks = new Map();
+  const analyticsCooldowns = new Map();
   const fencePolicy = new FenceIncidentPolicy();
   const reader = readline.createInterface({ input, crlfDelay: Infinity });
 
@@ -38,6 +54,8 @@ export async function runTrackBridge({ input = process.stdin, endpoint = API_BAS
 
     if (trackEvent.schemaVersion !== "track-event.v1") continue;
     const accumulatedTrackEvent = accumulateTrackTrajectory(trajectoryHistory, trackEvent);
+    latestTracks.set(trackKey(accumulatedTrackEvent), accumulatedTrackEvent);
+    expireTrackState({ trajectoryHistory, latestTracks, now: Date.parse(accumulatedTrackEvent.captureTime) || Date.now() });
     const matchingZones = zones.filter((zone) => zone.cameraId === accumulatedTrackEvent.cameraId);
 
     for (const zone of matchingZones) {
@@ -59,18 +77,119 @@ export async function runTrackBridge({ input = process.stdin, endpoint = API_BAS
       const evidence = createTextEvidence({ incidentHint, trackEvent: accumulatedTrackEvent, zone });
       const incident = buildIntrusionIncident({ trackEvent: accumulatedTrackEvent, zone, evidence, decision });
 
-      const accepted = await sendIncident({ endpoint, incident, deviceKey: registered.deviceKey }).catch(() => false);
-      if (!accepted) {
-        enqueueIncident(incident);
-      } else {
-        await sendEvidence({ endpoint, evidence, deviceKey: registered.deviceKey, cameraId: incident.cameraId });
-        await replayOutbox({ endpoint, deviceKey: registered.deviceKey });
-      }
+      await publishIncident({ endpoint, incident, evidence, registered });
+      emitted.push(incident);
+    }
+
+    const analyticsIncidents = evaluateIntegratedAnalytics({
+      trackEvent: accumulatedTrackEvent,
+      zones: matchingZones,
+      latestTracks: Array.from(latestTracks.values()).filter((track) => track.cameraId === accumulatedTrackEvent.cameraId),
+      cooldowns: analyticsCooldowns
+    });
+    for (const { incident, evidence } of analyticsIncidents) {
+      await publishIncident({ endpoint, incident, evidence, registered });
       emitted.push(incident);
     }
   }
 
   return emitted;
+}
+
+export function evaluateIntegratedAnalytics({ trackEvent, zones, latestTracks = [], cooldowns = new Map(), now = Date.parse(trackEvent.captureTime) || Date.now() }) {
+  const incidents = [];
+  for (const zone of zones) {
+    for (const decision of analyticsDecisions({ trackEvent, zone, latestTracks })) {
+      if (!decision.detected || isCoolingDown(cooldowns, decision, now)) continue;
+      rememberCooldown(cooldowns, decision, zone, now);
+      const incidentHint = `inc-${trackEvent.cameraId}-${String(decision.type).toLowerCase()}-${trackEvent.trackId || "frame"}-${now}`;
+      const evidence = createTextEvidence({ incidentHint, trackEvent, zone });
+      incidents.push({
+        decision,
+        evidence,
+        incident: buildAnalyticsIncident({
+          cameraId: trackEvent.cameraId,
+          zoneId: decision.zoneId || zone.zoneId,
+          trackId: trackEvent.trackId,
+          decision,
+          evidence,
+          captureTime: trackEvent.captureTime
+        })
+      });
+    }
+  }
+  return incidents;
+}
+
+function analyticsDecisions({ trackEvent, zone, latestTracks }) {
+  const analytics = zone.analytics || {};
+  const suspicious = analytics.suspicious || {};
+  const night = analytics.night || {};
+  const tamper = analytics.tamper || {};
+  const decisions = [];
+
+  if (suspicious.loitering?.enabled) decisions.push(detectLoitering(trackEvent, zone, withSeverity(suspicious.loitering, zone)));
+  if (suspicious.repeatedBoundaryApproach?.enabled) decisions.push(detectRepeatedBoundaryApproach(trackEvent, zone, withSeverity(suspicious.repeatedBoundaryApproach, zone)));
+  if (suspicious.suddenSpeedChange?.enabled) decisions.push(detectSuddenSpeedChange(trackEvent, withSeverity(suspicious.suddenSpeedChange, zone)));
+  if (suspicious.crowdFormation?.enabled) decisions.push(detectCrowdFormation(latestTracks, zone, withSeverity(suspicious.crowdFormation, zone)));
+  if (night.movement?.enabled && trackEvent.frameAnalysis) decisions.push(detectNightMovement(trackEvent, zone, trackEvent.frameAnalysis, withSeverity(night.movement, zone)));
+  if (tamper.frameQuality?.enabled && trackEvent.frameAnalysis) decisions.push(detectFrameTamper({ cameraId: trackEvent.cameraId, ...trackEvent.frameAnalysis }, withSeverity(tamper.frameQuality, zone)));
+
+  return decisions.map((decision) => ({
+    ruleVersion: analytics.ruleVersion || "analytics.v1",
+    ...decision,
+    severity: decision.severity || zone.severity || "MEDIUM",
+    reasonCodes: [...(decision.reasonCodes || []), `RULE_VERSION_${analytics.ruleVersion || "analytics.v1"}`]
+  }));
+}
+
+function withSeverity(config, zone) {
+  return { ...config, severity: config.severity || zone.severity || "MEDIUM" };
+}
+
+async function publishIncident({ endpoint, incident, evidence, registered }) {
+  const accepted = await sendIncident({ endpoint, incident, deviceKey: registered.deviceKey }).catch(() => false);
+  if (!accepted) {
+    enqueueIncident(incident);
+  } else {
+    await sendEvidence({ endpoint, evidence, deviceKey: registered.deviceKey, cameraId: incident.cameraId });
+    await replayOutbox({ endpoint, deviceKey: registered.deviceKey });
+  }
+}
+
+function isCoolingDown(cooldowns, decision, now) {
+  const previous = cooldowns.get(decisionKey(decision));
+  return previous && now - previous.at < previous.cooldownMs;
+}
+
+function rememberCooldown(cooldowns, decision, zone, now) {
+  const analytics = zone.analytics || {};
+  const cooldownMs = Number(
+    decision.metrics?.cooldownMs
+    ?? analytics.cooldownMs
+    ?? analytics.suspicious?.cooldownMs
+    ?? analytics.night?.cooldownMs
+    ?? analytics.tamper?.cooldownMs
+    ?? 15000
+  );
+  cooldowns.set(decisionKey(decision), { at: now, cooldownMs });
+}
+
+function decisionKey(decision) {
+  return `${decision.cameraId || "camera"}:${decision.zoneId || "zone"}:${decision.trackId || decision.trackIds?.join(",") || "frame"}:${decision.type}`;
+}
+
+function expireTrackState({ trajectoryHistory, latestTracks, now }) {
+  for (const [key, track] of latestTracks.entries()) {
+    const captureMs = Date.parse(track.captureTime) || now;
+    if (now - captureMs <= TRACK_STATE_TTL_MS) continue;
+    latestTracks.delete(key);
+    trajectoryHistory.delete(key);
+  }
+}
+
+function trackKey(trackEvent) {
+  return `${trackEvent.cameraId}:${trackEvent.trackId}`;
 }
 
 export function accumulateTrackTrajectory(history, trackEvent, { maxPoints = TRAJECTORY_HISTORY_POINTS } = {}) {

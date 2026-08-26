@@ -87,6 +87,19 @@
         }
       }
     },
+    "frameAnalysis": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["brightness", "contrast", "sharpness", "blockedRatio"],
+      "properties": {
+        "frameId": { "type": "string" },
+        "brightness": { "type": "number", "minimum": 0, "maximum": 1 },
+        "contrast": { "type": "number", "minimum": 0, "maximum": 1 },
+        "sharpness": { "type": "number", "minimum": 0, "maximum": 1 },
+        "blockedRatio": { "type": "number", "minimum": 0, "maximum": 1 },
+        "signalLost": { "type": "boolean" }
+      }
+    },
     "frame": {
       "type": "object",
       "additionalProperties": false,

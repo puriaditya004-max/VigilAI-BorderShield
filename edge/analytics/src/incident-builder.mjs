@@ -23,6 +23,7 @@ export function buildAnalyticsIncident({ cameraId, zoneId, trackId, decision, ev
 
 function incidentType(ruleType) {
   if (ruleType === "NIGHT_MOVEMENT") return "NIGHT_MOVEMENT";
+  if (ruleType === "CAMERA_TAMPER") return "CAMERA_TAMPER";
   if (ruleType === "FACE_CANDIDATE") return "FACE_CANDIDATE";
   if (ruleType === "ANPR_CANDIDATE") return "ANPR_CANDIDATE";
   return "SUSPICIOUS_ACTIVITY";

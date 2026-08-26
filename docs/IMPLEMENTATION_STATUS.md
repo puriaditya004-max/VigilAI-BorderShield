@@ -38,8 +38,8 @@ Verification completed on 2026-08-26:
 | Optional privacy blur | PARTIAL | `buildPrivacyRedactionPlan()` outputs face/plate blur actions with configurable detect-only mode; evidence artifacts can be encrypted; pixel-level media transform integration pending. |
 | ANPR / number-plate OCR | PARTIAL | Normalization, Indian plate-format validation, confidence thresholding, temporal voting and optional PaddleOCR runtime adapter in `edge/analytics/src/anpr.mjs`; field validation pending. |
 | Virtual-fence intrusion | DONE | `edge/analytics/src/virtual-fence.mjs`, bridge-side trajectory accumulation, `edge/analytics/config/zones.json`, tested by unit/integration/e2e including Python-style single-point streams. |
-| Suspicious-activity analytics | PARTIAL | Rule foundations for loitering, repeated boundary approach, crowd formation and sudden speed change in `edge/analytics/src/suspicious-activity.mjs`; no measured field tuning yet. |
-| Night-movement analytics | PARTIAL | Low-light quality assessment, night movement rule and tamper rules in `edge/analytics/src/night-watch.mjs`; camera-specific tuning pending. |
+| Suspicious-activity analytics | PARTIAL | Rule foundations for loitering, repeated boundary approach, crowd formation and sudden speed change are connected to `runTrackBridge()` behind zone-specific analytics config; covered by `tests/integration/analytics-to-control-api.mjs`. Field tuning pending. |
+| Night-movement analytics | PARTIAL | Python runtime can emit frame stats and bridge feeds configured low-light movement into incidents; covered by `tests/integration/analytics-to-control-api.mjs`. Camera-specific tuning pending. |
 | Real-time alerting and event logging | PARTIAL | Incident/audit flow plus SSE incident stream and operator lifecycle updates; full notification escalation pending. |
 | Command-and-control dashboard | PARTIAL | Static dashboard consumes live SSE incident updates, supports acknowledge/escalate actions and keeps polling fallback; React/TypeScript HMI not implemented. |
 | Existing CCTV/RTSP compatibility | PARTIAL | Python runtime accepts OpenCV sources including RTSP and maps source-frame detections into the canonical 1280x720 zone coordinate space; ONVIF discovery not implemented. |
@@ -58,7 +58,7 @@ Verification completed on 2026-08-26:
 | ONVIF discovery optional adapter | PARTIAL | `ONVIF` source type placeholder and URI classification exist; discovery protocol not implemented. |
 | Reconnection with exponential backoff | DONE | `reconnectDelay()` in `edge/edge-agent/src/camera-source.mjs`, covered by `tests/unit/camera-source.test.mjs`. |
 | Stream-health monitoring | DONE | `StreamHealthTracker` emits `CameraHealth` payloads with dropped frames and latency. |
-| FPS, resolution, latency and dropped-frame metrics | PARTIAL | Dropped-frame and latency metrics implemented; Python runtime requests/logs capture resolution and the orchestrator reports runtime duration/incident summary. Measured FPS from the real decoder loop is still pending. |
+| FPS, resolution, latency and dropped-frame metrics | PARTIAL | Dropped-frame and latency metrics implemented; Python runtime requests/logs capture resolution, emits frame brightness/contrast/sharpness/blocked-ratio metadata per detection, and the orchestrator reports runtime duration/incident summary. Measured FPS from the real decoder loop is still pending. |
 | Secure camera credential handling | PARTIAL | `redactUri()` prevents RTSP credentials in health payloads/loggable values; secret reference loading pending. |
 | Configurable frame sampling | DONE | `frameSampling.targetFps` and `maxDecodeFps` validated in camera source config. |
 | CPU and NVIDIA GPU execution modes | PARTIAL | Runtime config supports `CPU`/future modes; GPU execution not tested. |
@@ -71,10 +71,10 @@ Verification completed on 2026-08-26:
 | Plate-format validation | DONE | Indian registration pattern validation in `isValidIndianPlate()`. |
 | Temporal voting for ANPR | DONE | `votePlateCandidates()` requires repeated valid candidates above configurable confidence before accepting a plate. |
 | OCR/model integration for ANPR | PARTIAL | `ocrPlateImage()` consumes runtime JSON from `ANPR_OCR_COMMAND`; optional PaddleOCR wrapper in `edge/analytics/python/paddleocr_plate_runtime.py`. Requires installed OCR dependencies and real crop validation. |
-| Loitering detection | PARTIAL | `detectLoitering()` uses configurable dwell threshold and polygon containment. |
-| Repeated boundary approach | PARTIAL | `detectRepeatedBoundaryApproach()` uses configurable distance and count thresholds. |
-| Crowd formation | PARTIAL | `detectCrowdFormation()` counts tracked objects inside a configured polygon. |
-| Sudden speed-change detection | PARTIAL | `detectSuddenSpeedChange()` uses pixel-speed ratio and explicitly flags calibration requirement for world-speed claims. |
+| Loitering detection | PARTIAL | `detectLoitering()` uses configurable dwell threshold and polygon containment and is connected to bridge incident publishing when enabled in zone analytics config. |
+| Repeated boundary approach | PARTIAL | `detectRepeatedBoundaryApproach()` uses configurable distance/count thresholds and is connected to bridge incident publishing when enabled in zone analytics config. |
+| Crowd formation | PARTIAL | `detectCrowdFormation()` counts tracked objects inside a configured polygon and is connected to bridge incident publishing when enabled in zone analytics config. |
+| Sudden speed-change detection | PARTIAL | `detectSuddenSpeedChange()` uses pixel-speed ratio, is connected to bridge incident publishing when enabled, and explicitly flags calibration requirement for world-speed claims. |
 | Virtual-fence object filters | DONE | `objectClasses` filter and `OBJECT_CLASS_NOT_MONITORED` decision reason in `edge/analytics/src/virtual-fence.mjs`. |
 | Virtual-fence active schedule | DONE | Optional UTC schedule evaluator in `isZoneActive()`. |
 | Virtual-fence duplicate cooldown | DONE | `FenceIncidentPolicy` suppresses duplicate alerts with `DUPLICATE_COOLDOWN_ACTIVE`. |
@@ -98,8 +98,8 @@ Verification completed on 2026-08-26:
 | Number-plate redaction plan | DONE | Same privacy plan supports plate blur targets separate from ANPR voting. |
 | Pixel-level blur renderer | NOT STARTED | Requires image/video frame IO integration; current module produces auditable redaction instructions only. |
 | Low-light quality assessment | DONE | `assessLowLightQuality()` evaluates brightness/contrast against configurable thresholds. |
-| Night movement rule | PARTIAL | `detectNightMovement()` combines low-light quality and zone presence; field calibration pending. |
-| Camera tamper rule | PARTIAL | `detectFrameTamper()` covers signal loss, occlusion, blackout and blur/defocus heuristics. |
+| Night movement rule | PARTIAL | `detectNightMovement()` combines low-light quality and zone presence and can publish bridge incidents from frame analysis metadata; field calibration pending. |
+| Camera tamper rule | PARTIAL | `detectFrameTamper()` covers signal loss, occlusion, blackout and blur/defocus heuristics and can publish bridge incidents from frame analysis metadata. |
 | Rule-to-incident mapping | DONE | `edge/analytics/src/incident-builder.mjs` maps night and suspicious decisions to `incident-event.v1`, covered by contract validation. |
 
 ## Phase 4 - Realtime API and Security Hardening
@@ -180,6 +180,7 @@ Verification completed on 2026-08-26:
 | Audit log | DONE | append-only audit entries in `services/control-api/src/store.mjs` |
 | Split vision-to-analytics bridge | DONE | `edge/vision-runtime/src/simulate-tracks.mjs`, `edge/analytics/src/track-bridge.mjs` |
 | Edge pipeline orchestrator | PARTIAL | `edge/orchestrator/` supervises simulator or Python YOLO producer and routes JSON events through `runTrackBridge()` into the control API. |
+| Integrated analytics bridge | PARTIAL | `runTrackBridge()` now evaluates configured virtual-fence, suspicious-activity, night movement and camera-tamper rules against accumulated track/frame metadata and publishes accepted incidents/evidence through the same Control API/outbox path. |
 | ANPR rule foundation | PARTIAL | `edge/analytics/src/anpr.mjs`; optional OCR command adapter present, real crop validation pending. |
 | Suspicious-activity rule foundation | PARTIAL | `edge/analytics/src/suspicious-activity.mjs`; real-world tuning pending. |
 | Virtual-fence policy hardening | DONE | `FenceIncidentPolicy`, class filters, active schedule and cooldown in `edge/analytics/src/virtual-fence.mjs`. |
