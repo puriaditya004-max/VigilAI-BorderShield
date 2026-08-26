@@ -6,7 +6,7 @@ Stack: OpenCV, OCR, model serving, calibration.
 Current executable slice:
 
 - virtual fence crossing logic
-- ANPR normalization, validation, temporal voting and optional OCR runtime adapter
+- ANPR plate-detector adapter, crop-quality validation, normalization, masking, temporal voting and optional OCR runtime adapter
 - suspicious activity and night/tamper rule foundations
 - evidence hash placeholder generation
 - `IncidentEvent` creation
@@ -27,3 +27,11 @@ python edge/analytics/python/paddleocr_plate_runtime.py --image plate-crop.jpg
 ```
 
 The Node adapter `ocrPlateImage()` consumes runtime JSON and then applies the existing format validation and temporal voting. It does not hardcode or fabricate plate text.
+
+Optional ANPR plate detector runtime:
+
+```bash
+ANPR_PLATE_DETECT_COMMAND=node ANPR_PLATE_DETECT_ARGS="tests/fixtures/mock-plate-detector.mjs --image {imagePath}" npm run unit:test
+```
+
+Production use should point `ANPR_PLATE_DETECT_COMMAND` at an approved detector that returns plate bounding boxes. The pipeline rejects missing, tiny or blurry crops before OCR and keeps complete accuracy metrics as not measured until labelled footage is supplied.

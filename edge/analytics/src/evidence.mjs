@@ -4,6 +4,7 @@ import path from "node:path";
 import zlib from "node:zlib";
 import { encryptEvidenceBuffer, hasEvidenceEncryptionKey } from "../../../services/evidence-service/src/encryption.mjs";
 import { applyPixelRedaction } from "../../vision-runtime/src/privacy-redaction.mjs";
+import { buildFfmpegImageSequenceArgs, runFfmpegClip, writeFrameSequence } from "./media-buffer.mjs";
 
 export function createTextEvidence({ incidentHint, trackEvent, zone }) {
   fs.mkdirSync(evidenceDir(), { recursive: true });
@@ -107,6 +108,69 @@ export function createPngEvidence({
   };
 
   return attachRedactionMetadata(manifest, redaction.actions);
+}
+
+export async function createMp4ClipEvidence({
+  incidentHint,
+  trackEvent,
+  frames,
+  fps = 8,
+  ffmpeg = process.env.FFMPEG_BIN || "ffmpeg",
+  runClip = runFfmpegClip
+}) {
+  if (!Array.isArray(frames) || frames.length === 0) {
+    throw new Error("at least one frame is required to create MP4 clip evidence");
+  }
+
+  const root = evidenceDir();
+  fs.mkdirSync(root, { recursive: true });
+  const sequenceDir = path.join(root, `${incidentHint}-frames`);
+  writeFrameSequence({ frames, directory: sequenceDir });
+  const inputPattern = path.join(sequenceDir, "frame-%06d.png");
+  const clipPath = path.join(root, `${incidentHint}-clip.mp4`);
+  const args = buildFfmpegImageSequenceArgs({ inputPattern, outputPath: clipPath, fps });
+  const result = await runClip({ ffmpeg, args });
+  if (!result.ok) {
+    throw new Error(`FFmpeg clip generation failed: ${result.stderr || result.error || "unknown error"}`);
+  }
+
+  const encrypted = hasEvidenceEncryptionKey();
+  let finalClipPath = clipPath;
+  let payload = fs.readFileSync(clipPath);
+  if (encrypted) {
+    finalClipPath = `${clipPath}.enc`;
+    payload = encryptEvidenceBuffer(payload);
+    fs.writeFileSync(finalClipPath, payload);
+  }
+  const sha256 = crypto.createHash("sha256").update(payload).digest("hex");
+
+  return {
+    schemaVersion: "evidence-manifest.v1",
+    manifestId: `manifest-${incidentHint}`,
+    incidentId: incidentHint,
+    createdAt: new Date().toISOString(),
+    assets: [
+      {
+        kind: "CLIP",
+        uri: `file://${finalClipPath.replaceAll("\\", "/")}`,
+        sha256,
+        contentType: encrypted ? "application/octet-stream" : "video/mp4"
+      }
+    ],
+    sha256,
+    metadata: {
+      evidenceMode: encrypted ? "MP4_CLIP_ENCRYPTED" : "MP4_CLIP",
+      clipStatus: "AVAILABLE",
+      frameCount: frames.length,
+      fps,
+      sourceFrameWindow: {
+        firstCaptureTime: frames[0].captureTime,
+        lastCaptureTime: frames.at(-1).captureTime
+      }
+    },
+    keyframeUri: frames.find((frame) => frame.uri)?.uri || null,
+    clipUri: `file://${finalClipPath.replaceAll("\\", "/")}`
+  };
 }
 
 function buildEvidenceSvg({ trackEvent, zone }) {

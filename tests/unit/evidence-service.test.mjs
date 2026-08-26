@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import path from "node:path";
 import { cleanupRuntime, createRuntimeContext } from "../helpers/runtime.mjs";
-import { createPngEvidence } from "../../edge/analytics/src/evidence.mjs";
+import { createMp4ClipEvidence, createPngEvidence } from "../../edge/analytics/src/evidence.mjs";
 import { readJson, validateContract } from "../../packages/contracts/src/validate-contract.mjs";
 
 const ctx = createRuntimeContext("evidence-unit");
@@ -93,6 +93,32 @@ assert.equal(pngManifest.metadata.evidenceMode, "PNG_KEYFRAME");
 assert.equal(pngManifest.metadata.redactions.length, 1);
 assert.equal(verifyEvidenceManifest(pngManifest).valid, true);
 assert.equal(validateContract(readJson("packages/contracts/schemas/evidence-manifest.schema.json"), pngManifest, "EvidenceManifest").valid, true);
+
+const clipManifest = await createMp4ClipEvidence({
+  incidentHint: "inc-mp4-evidence",
+  trackEvent: {
+    cameraId: "cam-bop-01-east",
+    trackId: "trk-clip",
+    captureTime: "2026-08-26T00:00:02.000Z"
+  },
+  frames: [
+    { uri: pngManifest.keyframeUri, captureTime: "2026-08-26T00:00:01.000Z" },
+    { uri: pngManifest.keyframeUri, captureTime: "2026-08-26T00:00:02.000Z" }
+  ],
+  fps: 2,
+  runClip: async ({ args }) => {
+    fs.writeFileSync(args.at(-1), Buffer.from("000000206674797069736f6d0000020069736f6d69736f32617663316d703431", "hex"));
+    return { ok: true, code: 0 };
+  }
+});
+const clipPath = clipManifest.clipUri.replace("file://", "");
+assert.equal(fs.existsSync(clipPath), true);
+assert.equal(clipManifest.assets[0].kind, "CLIP");
+assert.equal(clipManifest.assets[0].contentType, "video/mp4");
+assert.equal(clipManifest.metadata.evidenceMode, "MP4_CLIP");
+assert.equal(clipManifest.metadata.frameCount, 2);
+assert.equal(verifyEvidenceManifest(clipManifest).valid, true);
+assert.equal(validateContract(readJson("packages/contracts/schemas/evidence-manifest.schema.json"), clipManifest, "EvidenceManifest").valid, true);
 
 cleanupRuntime(ctx);
 delete process.env.EVIDENCE_DIR;
