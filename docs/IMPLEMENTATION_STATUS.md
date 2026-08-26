@@ -32,7 +32,7 @@ Verification completed on 2026-08-26:
 
 | Capability | Status | Evidence |
 |---|---|---|
-| Human detection and tracking | PARTIAL | `edge/vision-runtime/src/track-event-adapter.mjs`, `edge/vision-runtime/python/yolo_track_runtime.py`; fixture tested, real camera not yet measured. |
+| Human detection and tracking | PARTIAL | `edge/vision-runtime/src/track-event-adapter.mjs`, `edge/vision-runtime/python/yolo_track_runtime.py`; fixture tested, real camera pipeline supported but accuracy not measured. |
 | Vehicle detection and classification | PARTIAL | Person/vehicle class mapping in `edge/vision-runtime/src/track-event-adapter.mjs`; fixture tested. |
 | Face detection only by default | PARTIAL | `edge/vision-runtime/src/privacy-redaction.mjs` can consume an external/OpenCV face detector runtime for redaction-only candidates and rejects biometric identity fields; field validation pending. |
 | Optional privacy blur | PARTIAL | `buildPrivacyRedactionPlan()` outputs face/plate blur actions with configurable detect-only mode; evidence artifacts can be encrypted; pixel-level media transform integration pending. |
@@ -50,13 +50,13 @@ Verification completed on 2026-08-26:
 
 | Requirement | Status | Evidence |
 |---|---|---|
-| RTSP URLs | PARTIAL | `edge/edge-agent/src/camera-source.mjs` classifies/redacts RTSP sources; `edge/vision-runtime/python/yolo_track_runtime.py` accepts RTSP through OpenCV. Real RTSP not tested. |
-| Local video files | PARTIAL | Source classification and Python OpenCV source support exist; no committed real video fixture. |
-| USB camera input | PARTIAL | `0`/numeric source classification and Python OpenCV source support exist; hardware not tested in automation. |
+| RTSP URLs | PARTIAL | `edge/edge-agent/src/camera-source.mjs` classifies/redacts RTSP sources; `edge/vision-runtime/python/yolo_track_runtime.py` accepts RTSP through OpenCV and requests 1280x720 capture geometry. Real RTSP not tested. |
+| Local video files | PARTIAL | Source classification and Python OpenCV source support exist; runtime logs actual capture resolution; no committed real video fixture. |
+| USB camera input | PARTIAL | `0`/numeric source classification and Python OpenCV source support exist; runtime requests 1280x720 and logs actual webcam resolution. Hardware not tested in automation. |
 | ONVIF discovery optional adapter | PARTIAL | `ONVIF` source type placeholder and URI classification exist; discovery protocol not implemented. |
 | Reconnection with exponential backoff | DONE | `reconnectDelay()` in `edge/edge-agent/src/camera-source.mjs`, covered by `tests/unit/camera-source.test.mjs`. |
 | Stream-health monitoring | DONE | `StreamHealthTracker` emits `CameraHealth` payloads with dropped frames and latency. |
-| FPS, resolution, latency and dropped-frame metrics | PARTIAL | Dropped-frame and latency metrics implemented; resolution and measured FPS are pending real frame reader integration. |
+| FPS, resolution, latency and dropped-frame metrics | PARTIAL | Dropped-frame and latency metrics implemented; Python runtime requests/logs capture resolution. Measured FPS is pending real frame reader integration. |
 | Secure camera credential handling | PARTIAL | `redactUri()` prevents RTSP credentials in health payloads/loggable values; secret reference loading pending. |
 | Configurable frame sampling | DONE | `frameSampling.targetFps` and `maxDecodeFps` validated in camera source config. |
 | CPU and NVIDIA GPU execution modes | PARTIAL | Runtime config supports `CPU`/future modes; GPU execution not tested. |

@@ -22,6 +22,10 @@ from datetime import datetime, timezone
 
 PERSON_CLASS_ID = 0
 VEHICLE_CLASS_IDS = {2, 3, 5, 7}
+ZONE_FRAME_WIDTH = 1280
+ZONE_FRAME_HEIGHT = 720
+CAP_PROP_FRAME_WIDTH = 3
+CAP_PROP_FRAME_HEIGHT = 4
 
 
 def iso_now():
@@ -53,6 +57,18 @@ def sha256_file(path):
         for chunk in iter(lambda: handle.read(1024 * 1024), b""):
             digest.update(chunk)
     return digest.hexdigest()
+
+
+def configure_capture_resolution(cap, width=ZONE_FRAME_WIDTH, height=ZONE_FRAME_HEIGHT):
+    cap.set(CAP_PROP_FRAME_WIDTH, width)
+    cap.set(CAP_PROP_FRAME_HEIGHT, height)
+    actual_width = int(cap.get(CAP_PROP_FRAME_WIDTH) or 0)
+    actual_height = int(cap.get(CAP_PROP_FRAME_HEIGHT) or 0)
+    return {
+        "requested": {"width": width, "height": height},
+        "actual": {"width": actual_width, "height": actual_height},
+        "matches_zone_geometry": actual_width == width and actual_height == height
+    }
 
 
 def track_event(camera_id, detection, model_name, frame_meta=None):
@@ -97,6 +113,20 @@ def main():
     cap = cv2.VideoCapture(source)
     if not cap.isOpened():
         raise SystemExit(f"Could not open source: {args.source}")
+    resolution = configure_capture_resolution(
+        cap,
+        width=ZONE_FRAME_WIDTH,
+        height=ZONE_FRAME_HEIGHT
+    )
+    print(
+        "Capture resolution requested="
+        f"{resolution['requested']['width']}x{resolution['requested']['height']} "
+        "actual="
+        f"{resolution['actual']['width']}x{resolution['actual']['height']} "
+        f"matches_zone_geometry={str(resolution['matches_zone_geometry']).lower()}",
+        file=sys.stderr,
+        flush=True
+    )
 
     frame_count = 0
     while True:
