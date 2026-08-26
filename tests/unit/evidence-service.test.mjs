@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import path from "node:path";
 import { cleanupRuntime, createRuntimeContext } from "../helpers/runtime.mjs";
+import { createPngEvidence } from "../../edge/analytics/src/evidence.mjs";
 import { readJson, validateContract } from "../../packages/contracts/src/validate-contract.mjs";
 
 const ctx = createRuntimeContext("evidence-unit");
@@ -48,6 +49,50 @@ assert.equal(validateContract(readJson("packages/contracts/schemas/evidence-mani
 const tampered = structuredClone(manifest);
 tampered.assets[0].sha256 = "0".repeat(64);
 assert.equal(verifyEvidenceManifest(tampered).valid, false);
+
+const pngManifest = createPngEvidence({
+  incidentHint: "inc-png-evidence",
+  trackEvent: {
+    cameraId: "cam-bop-01-east",
+    trackId: "trk-png",
+    objectClass: "PERSON",
+    confidence: 0.92,
+    bbox: { x: 4, y: 4, width: 8, height: 8 },
+    trajectory: [
+      { x: 4, y: 12, t: "2026-08-26T00:00:00.000Z" },
+      { x: 12, y: 12, t: "2026-08-26T00:00:01.000Z" }
+    ],
+    captureTime: "2026-08-26T00:00:01.000Z"
+  },
+  zone: {
+    zoneId: "zone-png",
+    line: { a: { x: 10, y: 0 }, b: { x: 10, y: 16 } }
+  },
+  frame: {
+    width: 16,
+    height: 16
+  },
+  privacyPlan: {
+    targets: [
+      {
+        targetType: "FACE",
+        action: "BLUR",
+        method: "GAUSSIAN_BLUR",
+        bbox: { x: 5, y: 5, width: 4, height: 4 },
+        confidence: 0.9,
+        reasonCodes: ["FACE_PRIVACY_REDACTION_ENABLED"]
+      }
+    ]
+  }
+});
+const pngAssetPath = pngManifest.assets[0].uri.replace("file://", "");
+const pngBytes = fs.readFileSync(pngAssetPath);
+assert.deepEqual([...pngBytes.subarray(0, 8)], [137, 80, 78, 71, 13, 10, 26, 10]);
+assert.equal(pngManifest.assets[0].contentType, "image/png");
+assert.equal(pngManifest.metadata.evidenceMode, "PNG_KEYFRAME");
+assert.equal(pngManifest.metadata.redactions.length, 1);
+assert.equal(verifyEvidenceManifest(pngManifest).valid, true);
+assert.equal(validateContract(readJson("packages/contracts/schemas/evidence-manifest.schema.json"), pngManifest, "EvidenceManifest").valid, true);
 
 cleanupRuntime(ctx);
 delete process.env.EVIDENCE_DIR;

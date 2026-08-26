@@ -176,6 +176,7 @@ Verification completed on 2026-08-26:
 | Incident ingestion | DONE | `POST /api/incidents`, `incident-event.v1` |
 | Evidence manifests and hash verification | DONE | `services/evidence-service/src/manifest.mjs`, `POST /api/evidence/manifests` |
 | Visual evidence fixture | DONE | SVG keyframe generation in `edge/analytics/src/evidence.mjs` |
+| Real PNG keyframe evidence | PARTIAL | `createPngEvidence()` writes hash-verified PNG keyframes with bbox/zone/trajectory overlays and redaction metadata; covered by `tests/unit/evidence-service.test.mjs`. It is not yet wired as the default real-video evidence path. |
 | Evidence redaction metadata | DONE | Evidence manifests can carry redaction actions in `metadata.redactions`; covered by `tests/unit/evidence-service.test.mjs`. |
 | Metrics endpoint | DONE | `GET /api/metrics` |
 | Audit log | DONE | append-only audit entries in `services/control-api/src/store.mjs` |

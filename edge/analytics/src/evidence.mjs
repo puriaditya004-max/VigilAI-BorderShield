@@ -1,7 +1,9 @@
 import crypto from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
+import zlib from "node:zlib";
 import { encryptEvidenceBuffer, hasEvidenceEncryptionKey } from "../../../services/evidence-service/src/encryption.mjs";
+import { applyPixelRedaction } from "../../vision-runtime/src/privacy-redaction.mjs";
 
 export function createTextEvidence({ incidentHint, trackEvent, zone }) {
   fs.mkdirSync(evidenceDir(), { recursive: true });
@@ -54,6 +56,59 @@ export function attachRedactionMetadata(evidence, redactions = []) {
   };
 }
 
+export function createPngEvidence({
+  incidentHint,
+  trackEvent,
+  zone,
+  frame,
+  privacyPlan
+}) {
+  fs.mkdirSync(evidenceDir(), { recursive: true });
+  const width = Number(frame?.width || trackEvent.coordinateSpace?.canonical?.width || 1280);
+  const height = Number(frame?.height || trackEvent.coordinateSpace?.canonical?.height || 720);
+  const basePixels = frame?.pixels ? Buffer.from(frame.pixels) : buildSyntheticEvidencePixels({ width, height, trackEvent, zone });
+  const redaction = applyPixelRedaction({
+    pixels: basePixels,
+    width,
+    height,
+    plan: privacyPlan || { targets: [] }
+  });
+  const annotated = drawEvidenceOverlay({ pixels: redaction.pixels, width, height, trackEvent, zone });
+  const png = encodePngRgba({ width, height, pixels: annotated });
+  const encrypted = hasEvidenceEncryptionKey();
+  const keyframeName = `${incidentHint}-keyframe.png${encrypted ? ".enc" : ""}`;
+  const keyframePath = path.join(evidenceDir(), keyframeName);
+  const payload = encrypted ? encryptEvidenceBuffer(png) : png;
+
+  fs.writeFileSync(keyframePath, payload);
+  const sha256 = crypto.createHash("sha256").update(payload).digest("hex");
+  const manifest = {
+    schemaVersion: "evidence-manifest.v1",
+    manifestId: `manifest-${incidentHint}`,
+    incidentId: incidentHint,
+    createdAt: new Date().toISOString(),
+    assets: [
+      {
+        kind: "KEYFRAME",
+        uri: `file://${keyframePath.replaceAll("\\", "/")}`,
+        sha256,
+        contentType: encrypted ? "application/octet-stream" : "image/png"
+      }
+    ],
+    sha256,
+    metadata: {
+      evidenceMode: encrypted ? "PNG_KEYFRAME_ENCRYPTED" : "PNG_KEYFRAME",
+      redactions: redaction.actions,
+      frame: { width, height },
+      clipStatus: "NOT_AVAILABLE"
+    },
+    keyframeUri: `file://${keyframePath.replaceAll("\\", "/")}`,
+    clipUri: null
+  };
+
+  return attachRedactionMetadata(manifest, redaction.actions);
+}
+
 function buildEvidenceSvg({ trackEvent, zone }) {
   const width = 1280;
   const height = 720;
@@ -84,6 +139,110 @@ function escapeXml(value) {
     .replaceAll('"', "&quot;")
     .replaceAll("'", "&apos;");
 }
+
+function buildSyntheticEvidencePixels({ width, height }) {
+  const pixels = Buffer.alloc(width * height * 4);
+  for (let y = 0; y < height; y += 1) {
+    for (let x = 0; x < width; x += 1) {
+      const index = (y * width + x) * 4;
+      pixels[index] = 18;
+      pixels[index + 1] = 26 + Math.round((y / Math.max(1, height)) * 24);
+      pixels[index + 2] = 32 + Math.round((x / Math.max(1, width)) * 20);
+      pixels[index + 3] = 255;
+    }
+  }
+  return pixels;
+}
+
+function drawEvidenceOverlay({ pixels, width, height, trackEvent, zone }) {
+  const output = Buffer.from(pixels);
+  drawLine(output, width, height, zone.line.a.x, zone.line.a.y, zone.line.b.x, zone.line.b.y, [244, 176, 79, 255]);
+  drawRect(output, width, height, trackEvent.bbox, [239, 98, 108, 255]);
+  for (let index = 1; index < trackEvent.trajectory.length; index += 1) {
+    const a = trackEvent.trajectory[index - 1];
+    const b = trackEvent.trajectory[index];
+    drawLine(output, width, height, a.x, a.y, b.x, b.y, [69, 192, 132, 255]);
+  }
+  return output;
+}
+
+function drawRect(pixels, width, height, bbox, color) {
+  const x1 = Math.round(bbox.x);
+  const y1 = Math.round(bbox.y);
+  const x2 = Math.round(bbox.x + bbox.width);
+  const y2 = Math.round(bbox.y + bbox.height);
+  drawLine(pixels, width, height, x1, y1, x2, y1, color);
+  drawLine(pixels, width, height, x2, y1, x2, y2, color);
+  drawLine(pixels, width, height, x2, y2, x1, y2, color);
+  drawLine(pixels, width, height, x1, y2, x1, y1, color);
+}
+
+function drawLine(pixels, width, height, x1, y1, x2, y2, color) {
+  const steps = Math.max(Math.abs(x2 - x1), Math.abs(y2 - y1), 1);
+  for (let step = 0; step <= steps; step += 1) {
+    const x = Math.round(x1 + ((x2 - x1) * step) / steps);
+    const y = Math.round(y1 + ((y2 - y1) * step) / steps);
+    setPixel(pixels, width, height, x, y, color);
+  }
+}
+
+function setPixel(pixels, width, height, x, y, color) {
+  if (x < 0 || y < 0 || x >= width || y >= height) return;
+  const index = (y * width + x) * 4;
+  for (let channel = 0; channel < 4; channel += 1) pixels[index + channel] = color[channel];
+}
+
+function encodePngRgba({ width, height, pixels }) {
+  const scanlines = Buffer.alloc((width * 4 + 1) * height);
+  for (let y = 0; y < height; y += 1) {
+    const scanlineStart = y * (width * 4 + 1);
+    scanlines[scanlineStart] = 0;
+    pixels.copy(scanlines, scanlineStart + 1, y * width * 4, (y + 1) * width * 4);
+  }
+  return Buffer.concat([
+    Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]),
+    pngChunk("IHDR", ihdr(width, height)),
+    pngChunk("IDAT", zlib.deflateSync(scanlines)),
+    pngChunk("IEND", Buffer.alloc(0))
+  ]);
+}
+
+function ihdr(width, height) {
+  const data = Buffer.alloc(13);
+  data.writeUInt32BE(width, 0);
+  data.writeUInt32BE(height, 4);
+  data[8] = 8;
+  data[9] = 6;
+  data[10] = 0;
+  data[11] = 0;
+  data[12] = 0;
+  return data;
+}
+
+function pngChunk(type, data) {
+  const typeBuffer = Buffer.from(type);
+  const length = Buffer.alloc(4);
+  length.writeUInt32BE(data.length, 0);
+  const crc = Buffer.alloc(4);
+  crc.writeUInt32BE(crc32(Buffer.concat([typeBuffer, data])), 0);
+  return Buffer.concat([length, typeBuffer, data, crc]);
+}
+
+function crc32(buffer) {
+  let crc = 0xffffffff;
+  for (const byte of buffer) {
+    crc = (crc >>> 8) ^ CRC_TABLE[(crc ^ byte) & 0xff];
+  }
+  return (crc ^ 0xffffffff) >>> 0;
+}
+
+const CRC_TABLE = Array.from({ length: 256 }, (_, index) => {
+  let value = index;
+  for (let bit = 0; bit < 8; bit += 1) {
+    value = value & 1 ? 0xedb88320 ^ (value >>> 1) : value >>> 1;
+  }
+  return value >>> 0;
+});
 
 function evidenceDir() {
   return path.resolve(process.env.EVIDENCE_DIR || "edge/edge-agent/data/evidence");

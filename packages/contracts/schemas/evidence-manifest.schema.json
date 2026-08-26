@@ -20,11 +20,14 @@
         "properties": {
           "kind": { "enum": ["KEYFRAME", "CLIP", "ANNOTATION"] },
           "uri": { "type": "string" },
-          "sha256": { "type": "string", "pattern": "^[a-f0-9]{64}$" }
+          "sha256": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+          "contentType": { "type": "string" }
         }
       }
     },
     "sha256": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+    "keyframeUri": { "type": "string" },
+    "clipUri": { "type": ["string", "null"] },
     "metadata": {
       "type": "object",
       "additionalProperties": true,
