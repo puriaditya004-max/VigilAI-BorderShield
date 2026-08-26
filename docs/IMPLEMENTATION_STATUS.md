@@ -34,12 +34,12 @@ Verification completed on 2026-08-26:
 |---|---|---|
 | Human detection and tracking | PARTIAL | `edge/vision-runtime/src/track-event-adapter.mjs`, `edge/vision-runtime/python/yolo_track_runtime.py`; fixture tested, real camera not yet measured. |
 | Vehicle detection and classification | PARTIAL | Person/vehicle class mapping in `edge/vision-runtime/src/track-event-adapter.mjs`; fixture tested. |
-| Face detection only by default | NOT STARTED | Planned privacy-preserving module; no biometric storage implemented. |
-| Optional privacy blur | NOT STARTED | No blur pipeline yet. |
+| Face detection only by default | PARTIAL | `edge/vision-runtime/src/privacy-redaction.mjs` builds face candidates for redaction only and rejects biometric identity fields; detector integration pending. |
+| Optional privacy blur | PARTIAL | `buildPrivacyRedactionPlan()` outputs face/plate blur actions with configurable detect-only mode; pixel-level media transform integration pending. |
 | ANPR / number-plate OCR | PARTIAL | Normalization, Indian plate-format validation, confidence thresholding and temporal voting foundation in `edge/analytics/src/anpr.mjs`; OCR detector integration pending. |
 | Virtual-fence intrusion | DONE | `edge/analytics/src/virtual-fence.mjs`, `edge/analytics/config/zones.json`, tested by unit/integration/e2e. |
 | Suspicious-activity analytics | PARTIAL | Rule foundations for loitering, repeated boundary approach, crowd formation and sudden speed change in `edge/analytics/src/suspicious-activity.mjs`; no measured field tuning yet. |
-| Night-movement analytics | NOT STARTED | No low-light quality rule or preprocessing pipeline yet. |
+| Night-movement analytics | PARTIAL | Low-light quality assessment, night movement rule and tamper rules in `edge/analytics/src/night-watch.mjs`; camera-specific tuning pending. |
 | Real-time alerting and event logging | PARTIAL | Control API incident/audit flow exists; no WebSocket/SSE yet. |
 | Command-and-control dashboard | PARTIAL | Static dashboard in `apps/command-ui/public/`; React/TypeScript HMI not implemented. |
 | Existing CCTV/RTSP compatibility | PARTIAL | Python runtime accepts OpenCV sources including RTSP; ONVIF discovery not implemented. |
@@ -78,6 +78,20 @@ Verification completed on 2026-08-26:
 | Virtual-fence duplicate cooldown | DONE | `FenceIncidentPolicy` suppresses duplicate alerts with `DUPLICATE_COOLDOWN_ACTIVE`. |
 | Decision reason codes | DONE | Rule outcomes include deterministic reason codes; incident reason codes include `ZONE_POLICY_MATCHED` when policy passes. |
 
+## Phase 3 - Privacy and Night Operations Foundation
+
+| Requirement | Status | Evidence |
+|---|---|---|
+| Face detection without identity recognition | PARTIAL | `buildFaceCandidate()` emits `identityRecognition: false` and reason `IDENTITY_RECOGNITION_DISABLED`; no recognition/matching path exists. |
+| Block biometric identity fields | DONE | `assertNoBiometricIdentityFields()` rejects `personId`, names, embeddings and match identifiers. |
+| Face privacy redaction plan | DONE | `buildPrivacyRedactionPlan()` creates bounded face blur targets and supports detect-only mode. |
+| Number-plate redaction plan | DONE | Same privacy plan supports plate blur targets separate from ANPR voting. |
+| Pixel-level blur renderer | NOT STARTED | Requires image/video frame IO integration; current module produces auditable redaction instructions only. |
+| Low-light quality assessment | DONE | `assessLowLightQuality()` evaluates brightness/contrast against configurable thresholds. |
+| Night movement rule | PARTIAL | `detectNightMovement()` combines low-light quality and zone presence; field calibration pending. |
+| Camera tamper rule | PARTIAL | `detectFrameTamper()` covers signal loss, occlusion, blackout and blur/defocus heuristics. |
+| Rule-to-incident mapping | DONE | `edge/analytics/src/incident-builder.mjs` maps night and suspicious decisions to `incident-event.v1`, covered by contract validation. |
+
 ## Implemented Foundation
 
 | Area | Status | Evidence |
@@ -95,6 +109,9 @@ Verification completed on 2026-08-26:
 | ANPR rule foundation | PARTIAL | `edge/analytics/src/anpr.mjs`; OCR source pending. |
 | Suspicious-activity rule foundation | PARTIAL | `edge/analytics/src/suspicious-activity.mjs`; real-world tuning pending. |
 | Virtual-fence policy hardening | DONE | `FenceIncidentPolicy`, class filters, active schedule and cooldown in `edge/analytics/src/virtual-fence.mjs`. |
+| Privacy redaction foundation | PARTIAL | `edge/vision-runtime/src/privacy-redaction.mjs`; no identity recognition or embeddings. |
+| Night/tamper analytics foundation | PARTIAL | `edge/analytics/src/night-watch.mjs`; deterministic rules, not field-calibrated claims. |
+| Analytics incident builder | DONE | `edge/analytics/src/incident-builder.mjs` validates generated night/suspicious incidents against contract. |
 | Docker Compose development path | PARTIAL | `deploy/compose/compose.yaml`; production hardening pending. |
 
 ## Current Verification Commands
@@ -108,10 +125,12 @@ npm run verify:stable
 
 - Device keys are stored in local JSON for development; production must store hashed keys.
 - No operator login, RBAC, MFA, rate limiting, or TLS/mTLS enforcement yet.
-- Face detection is not implemented; ANPR has only rule/voting foundations and no OCR model integration yet.
+- Face detection has a privacy-only candidate/redaction foundation; no identity recognition, matching or biometric embeddings are implemented.
+- ANPR has only rule/voting foundations and no OCR model integration yet.
+- Privacy redaction currently emits blur instructions; production video/image blur rendering still needs frame pipeline integration.
 - Evidence is local filesystem based; production needs encrypted storage and retention enforcement.
 - No measured accuracy, false-alert rate, or camera capacity should be claimed.
 
 ## Next Highest-Priority Phase
 
-Next priority should connect real detector outputs into the Phase 2 rule modules: feed plate OCR candidates into `votePlateCandidates()`, route suspicious-activity detections into `incident-event.v1`, and add privacy-preserving face-detection/blur foundations without identity recognition.
+Next priority should add real-time operator delivery and production security: SSE/WebSocket alert streaming, operator auth/RBAC, hashed device keys, rate limiting, and retention-policy enforcement for evidence.
