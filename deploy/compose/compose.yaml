@@ -7,15 +7,25 @@ services:
       - "7080:7080"
     volumes:
       - ../../:/app
+    env_file:
+      - ../../.env
     environment:
       PORT: "7080"
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:7080/health"]
+      interval: 15s
+      timeout: 3s
+      retries: 5
   edge-bridge:
     image: node:20-alpine
     working_dir: /app
     command: ["sh", "-c", "node edge/vision-runtime/src/simulate-tracks.mjs | node edge/analytics/src/track-bridge.mjs"]
     depends_on:
-      - control-api
+      control-api:
+        condition: service_healthy
     volumes:
       - ../../:/app
+    env_file:
+      - ../../.env
     environment:
       CONTROL_API_URL: "http://control-api:7080"

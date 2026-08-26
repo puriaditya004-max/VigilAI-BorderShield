@@ -1,16 +1,19 @@
 import crypto from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
+import { encryptEvidenceBuffer, hasEvidenceEncryptionKey } from "../../../services/evidence-service/src/encryption.mjs";
 
 export function createTextEvidence({ incidentHint, trackEvent, zone }) {
   fs.mkdirSync(evidenceDir(), { recursive: true });
 
-  const keyframeName = `${incidentHint}-keyframe.svg`;
+  const encrypted = hasEvidenceEncryptionKey();
+  const keyframeName = `${incidentHint}-keyframe.svg${encrypted ? ".enc" : ""}`;
   const keyframePath = path.join(evidenceDir(), keyframeName);
   const content = buildEvidenceSvg({ trackEvent, zone });
+  const payload = encrypted ? encryptEvidenceBuffer(Buffer.from(content, "utf8")) : Buffer.from(content, "utf8");
 
-  fs.writeFileSync(keyframePath, content);
-  const sha256 = crypto.createHash("sha256").update(content).digest("hex");
+  fs.writeFileSync(keyframePath, payload);
+  const sha256 = crypto.createHash("sha256").update(payload).digest("hex");
 
   return {
     schemaVersion: "evidence-manifest.v1",

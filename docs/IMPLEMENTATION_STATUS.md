@@ -35,7 +35,7 @@ Verification completed on 2026-08-26:
 | Human detection and tracking | PARTIAL | `edge/vision-runtime/src/track-event-adapter.mjs`, `edge/vision-runtime/python/yolo_track_runtime.py`; fixture tested, real camera not yet measured. |
 | Vehicle detection and classification | PARTIAL | Person/vehicle class mapping in `edge/vision-runtime/src/track-event-adapter.mjs`; fixture tested. |
 | Face detection only by default | PARTIAL | `edge/vision-runtime/src/privacy-redaction.mjs` builds face candidates for redaction only and rejects biometric identity fields; detector integration pending. |
-| Optional privacy blur | PARTIAL | `buildPrivacyRedactionPlan()` outputs face/plate blur actions with configurable detect-only mode; pixel-level media transform integration pending. |
+| Optional privacy blur | PARTIAL | `buildPrivacyRedactionPlan()` outputs face/plate blur actions with configurable detect-only mode; evidence artifacts can be encrypted; pixel-level media transform integration pending. |
 | ANPR / number-plate OCR | PARTIAL | Normalization, Indian plate-format validation, confidence thresholding and temporal voting foundation in `edge/analytics/src/anpr.mjs`; OCR detector integration pending. |
 | Virtual-fence intrusion | DONE | `edge/analytics/src/virtual-fence.mjs`, `edge/analytics/config/zones.json`, tested by unit/integration/e2e. |
 | Suspicious-activity analytics | PARTIAL | Rule foundations for loitering, repeated boundary approach, crowd formation and sudden speed change in `edge/analytics/src/suspicious-activity.mjs`; no measured field tuning yet. |
@@ -43,7 +43,7 @@ Verification completed on 2026-08-26:
 | Real-time alerting and event logging | PARTIAL | Incident/audit flow plus SSE incident stream and operator lifecycle updates; full notification escalation pending. |
 | Command-and-control dashboard | PARTIAL | Static dashboard consumes live SSE incident updates, supports acknowledge/escalate actions and keeps polling fallback; React/TypeScript HMI not implemented. |
 | Existing CCTV/RTSP compatibility | PARTIAL | Python runtime accepts OpenCV sources including RTSP; ONVIF discovery not implemented. |
-| Offline edge operation and synchronization | PARTIAL | Durable JSON outbox and replay in `edge/edge-agent/src/outbox.mjs`; no encrypted rolling buffer. |
+| Offline edge operation and synchronization | PARTIAL | Durable JSON outbox and replay in `edge/edge-agent/src/outbox.mjs`; evidence encryption is optional, encrypted rolling video buffer pending. |
 | Accuracy/performance evaluation | BLOCKED | Labelled dataset and measured hardware unavailable; no accuracy claims made. |
 
 ## Phase 1 - Real Camera and Video Ingestion
@@ -120,6 +120,20 @@ Verification completed on 2026-08-26:
 | Dashboard command actions | DONE | Incident cards show acknowledge/escalate buttons for open incidents. |
 | Human-in-the-loop critical alert handling | PARTIAL | Critical incidents can be acknowledged/escalated by operators; formal SLA/escalation policy pending. |
 
+## Phase 6 - Evidence Lifecycle and Deployment Readiness
+
+| Requirement | Status | Evidence |
+|---|---|---|
+| Evidence encryption at rest | PARTIAL | `EVIDENCE_ENCRYPTION_KEY` enables AES-256-GCM encrypted generated evidence artifacts in `edge/analytics/src/evidence.mjs`; object-store/KMS integration pending. |
+| Encrypted evidence verification | DONE | Hash verification covers encrypted artifacts; `tests/integration/encrypted-evidence.mjs` decrypts and verifies generated evidence. |
+| Evidence retention policy | DONE | `expireEvidenceManifests()` marks old manifests `EXPIRED` and can delete local assets. |
+| Retention API | DONE | `POST /api/evidence/retention/run` requires COMMANDER permission and writes audit event. |
+| Retention CLI | DONE | `npm run evidence:retention` runs cleanup for scheduled jobs. |
+| Production env template | DONE | `.env.example` documents runtime, security, rate limit and evidence lifecycle settings without secrets. |
+| Compose healthcheck | DONE | `deploy/compose/compose.yaml` waits for `control-api` health before starting `edge-bridge`. |
+| Deployment runbook | DONE | `docs/runbooks/README.md` documents smoke tests, operator workflow and retention procedure. |
+| Production TLS/mTLS | BLOCKED | Requires deployment gateway/certificates. |
+
 ## Implemented Foundation
 
 | Area | Status | Evidence |
@@ -143,7 +157,8 @@ Verification completed on 2026-08-26:
 | Realtime incident stream | DONE | SSE stream in `services/control-api/src/server.mjs`; dashboard subscribes through `EventSource`. |
 | API security helpers | PARTIAL | `services/control-api/src/security.mjs` covers hashed device keys, in-memory rate limits and operator RBAC foundation. |
 | Incident acknowledgement workflow | DONE | API/UI support acknowledge and escalate actions with audit trail and SSE refresh. |
-| Docker Compose development path | PARTIAL | `deploy/compose/compose.yaml`; production hardening pending. |
+| Evidence lifecycle controls | DONE | Optional encryption plus API/CLI retention cleanup with audit trail. |
+| Docker Compose development path | PARTIAL | `deploy/compose/compose.yaml` includes env-file and healthcheck; production gateway/TLS still pending. |
 
 ## Current Verification Commands
 
@@ -160,9 +175,9 @@ npm run verify:stable
 - Face detection has a privacy-only candidate/redaction foundation; no identity recognition, matching or biometric embeddings are implemented.
 - ANPR has only rule/voting foundations and no OCR model integration yet.
 - Privacy redaction currently emits blur instructions; production video/image blur rendering still needs frame pipeline integration.
-- Evidence is local filesystem based; production needs encrypted storage and retention enforcement.
+- Evidence encryption and retention exist for local filesystem artifacts; production object storage/KMS integration is still pending.
 - No measured accuracy, false-alert rate, or camera capacity should be claimed.
 
 ## Next Highest-Priority Phase
 
-Next priority should add evidence lifecycle controls and deployment hardening: retention-policy cleanup, encrypted evidence storage, production environment templates, healthchecks and deployment runbooks.
+Next priority should validate with real RTSP/USB camera footage and model assets: ANPR OCR integration, face detector integration, pixel blur rendering, performance baselines and measured accuracy/false-alert reporting.

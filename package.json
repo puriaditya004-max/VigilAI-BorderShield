@@ -10,9 +10,10 @@
     "vision:simulate": "node edge/vision-runtime/src/simulate-tracks.mjs",
     "edge:simulate": "node edge/analytics/src/simulate-fence.mjs",
     "edge:bridge": "node edge/analytics/src/track-bridge.mjs",
+    "evidence:retention": "node services/evidence-service/src/run-retention.mjs",
     "command-ui:start": "node services/control-api/src/server.mjs",
-    "unit:test": "node tests/unit/vision-runtime.test.mjs && node tests/unit/evidence-service.test.mjs && node tests/unit/camera-source.test.mjs && node tests/unit/anpr.test.mjs && node tests/unit/suspicious-activity.test.mjs && node tests/unit/virtual-fence-policy.test.mjs && node tests/unit/privacy-redaction.test.mjs && node tests/unit/night-watch.test.mjs && node tests/unit/incident-builder.test.mjs && node tests/unit/control-api-security.test.mjs",
-    "integration:test": "node tests/integration/camera-to-incident.mjs && node tests/integration/offline-outbox-replay.mjs && node tests/integration/device-key-rotation.mjs && node tests/integration/control-api-hardening.mjs && node tests/integration/realtime-events.mjs && node tests/integration/incident-lifecycle.mjs",
+    "unit:test": "node tests/unit/vision-runtime.test.mjs && node tests/unit/evidence-service.test.mjs && node tests/unit/camera-source.test.mjs && node tests/unit/anpr.test.mjs && node tests/unit/suspicious-activity.test.mjs && node tests/unit/virtual-fence-policy.test.mjs && node tests/unit/privacy-redaction.test.mjs && node tests/unit/night-watch.test.mjs && node tests/unit/incident-builder.test.mjs && node tests/unit/control-api-security.test.mjs && node tests/unit/evidence-lifecycle.test.mjs",
+    "integration:test": "node tests/integration/camera-to-incident.mjs && node tests/integration/offline-outbox-replay.mjs && node tests/integration/device-key-rotation.mjs && node tests/integration/control-api-hardening.mjs && node tests/integration/realtime-events.mjs && node tests/integration/incident-lifecycle.mjs && node tests/integration/encrypted-evidence.mjs && node tests/integration/evidence-retention-api.mjs",
     "e2e:test": "node tests/e2e/full-pipeline.mjs",
     "test": "npm run contracts:test && npm run unit:test && npm run integration:test && npm run e2e:test",
     "verify:stable": "node tests/run-stability.mjs"

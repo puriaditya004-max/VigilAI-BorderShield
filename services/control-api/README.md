@@ -24,14 +24,18 @@ Endpoints:
 - `GET /api/incidents`
 - `POST /api/evidence/manifests`
 - `GET /api/evidence/manifests`
+- `POST /api/evidence/retention/run`
 - `GET /api/audit`
 - `GET /api/metrics`
 
 Production invariants already enforced:
 
 - camera device key required for health and incident ingest
-- camera device key rotation with audit
+- camera device keys are stored hashed and rotated with audit
 - `IncidentEvent` and `CameraHealth` contract validation
 - `EvidenceManifest` contract and local hash verification
 - idempotent incident creation through `Idempotency-Key`
 - append-only audit records for camera and incident events
+- SSE realtime incident/lifecycle stream at `GET /api/events`
+- operator RBAC foundation for acknowledgement, escalation and retention actions
+- request body limits, security headers and in-memory rate limiting

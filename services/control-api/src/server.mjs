@@ -4,6 +4,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { validateContract, readJson } from "../../../packages/contracts/src/validate-contract.mjs";
 import { verifyEvidenceManifest } from "../../evidence-service/src/manifest.mjs";
+import { buildRetentionSummary, expireEvidenceManifests } from "../../evidence-service/src/retention.mjs";
 import { appendAudit, ensureStore, readDb, updateDb } from "./store.mjs";
 import { badRequest, forbidden, notFound, payloadTooLarge, readJsonBody, sendJson, unauthorized, withSecurityHeaders } from "./http.mjs";
 import { authenticateOperator, clientRateLimitKey, createRateLimiter, hashDeviceKey, issueDeviceKey, publicCamera, publicCameraWithIssuedKey, verifyDeviceKey } from "./security.mjs";
@@ -92,6 +93,10 @@ const server = http.createServer(async (req, res) => {
 
     if (req.method === "GET" && url.pathname === "/api/evidence/manifests") {
       return sendJson(res, 200, readDb().evidence.slice().reverse());
+    }
+
+    if (req.method === "POST" && url.pathname === "/api/evidence/retention/run") {
+      return runEvidenceRetention(req, res, await readJsonBody(req));
     }
 
     if (req.method === "GET" && url.pathname === "/api/audit") {
@@ -282,6 +287,28 @@ function createEvidenceManifest(req, res, body) {
   return sendJson(res, result.created ? 201 : 200, result.manifest);
 }
 
+function runEvidenceRetention(req, res, body) {
+  const auth = authenticateOperator(req, { requiredPermission: "incident:escalate" });
+  if (!auth.ok) return auth.statusCode === 403 ? forbidden(res, auth.message) : unauthorized(res, auth.message);
+
+  const result = updateDb((db) => {
+    const retention = expireEvidenceManifests(db, {
+      now: body.now ? new Date(body.now) : new Date(),
+      retentionDays: body.retentionDays === undefined ? undefined : Number(body.retentionDays),
+      deleteLocalFiles: body.deleteLocalFiles
+    });
+    appendAudit(db, {
+      actor: auth.operator.operatorId,
+      action: "evidence.retention_run",
+      resource: `expired:${retention.expired.length}`,
+      requestId: req.headers["idempotency-key"]
+    });
+    return { ...retention, summary: buildRetentionSummary(db) };
+  });
+
+  return sendJson(res, 200, result);
+}
+
 function authenticateCamera(req, cameraId) {
   const deviceKey = req.headers["x-device-key"];
   if (!cameraId) return { ok: false, message: "cameraId is required" };
@@ -350,7 +377,8 @@ function buildMetrics(db) {
       bySeverity: incidentsBySeverity
     },
     evidence: {
-      verified: db.evidence.filter((item) => item.status === "VERIFIED").length
+      verified: db.evidence.filter((item) => item.status === "VERIFIED").length,
+      expired: db.evidence.filter((item) => item.status === "EXPIRED").length
     },
     audit: {
       total: db.audits.length

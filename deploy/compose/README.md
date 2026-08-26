@@ -5,7 +5,16 @@ Docker Compose manifests for SIH demo / single-post pilot deployment (2-3 contai
 Current Compose file runs the dependency-free control API:
 
 ```bash
+copy .env.example .env
 docker compose -f deploy/compose/compose.yaml up
 ```
 
 The service stores local development state under `services/control-api/data/`, which is ignored by git.
+
+Production notes:
+
+- set `DEVICE_KEY_SALT`, `OPERATOR_TOKEN` and `EVIDENCE_ENCRYPTION_KEY` before running outside local demo mode
+- keep `.env` out of git
+- expose the control API behind TLS/mTLS at the site gateway
+- run `npm run evidence:retention` from a scheduled job if the API retention endpoint is not used
+- replace the simulator command in `edge-bridge` with the real RTSP/USB runtime for field testing
