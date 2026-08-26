@@ -29,7 +29,8 @@
       "properties": {
         "blurScore": { "type": "number", "minimum": 0 },
         "darknessScore": { "type": "number", "minimum": 0 },
-        "droppedFrames": { "type": "integer", "minimum": 0 }
+        "droppedFrames": { "type": "integer", "minimum": 0 },
+        "averageLatencyMs": { "type": "integer", "minimum": 0 }
       }
     }
   }

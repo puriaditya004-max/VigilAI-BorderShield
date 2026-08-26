@@ -14,6 +14,7 @@
   "quality": {
     "blurScore": 0.12,
     "darknessScore": 0.18,
-    "droppedFrames": 0
+    "droppedFrames": 0,
+    "averageLatencyMs": 120
   }
 }

@@ -1,0 +1,21 @@
+{
+  "cameraId": "cam-bop-01-east",
+  "name": "BOP 01 East Gate Camera",
+  "edgeNodeId": "edge-bop-01",
+  "location": "East perimeter",
+  "sourceType": "RTSP",
+  "streamUri": "rtsp://operator:secret-password@camera.local/stream1",
+  "frameSampling": {
+    "targetFps": 8,
+    "maxDecodeFps": 25
+  },
+  "runtime": {
+    "mode": "CPU",
+    "tracker": "bytetrack"
+  },
+  "reconnect": {
+    "initialDelayMs": 500,
+    "maxDelayMs": 30000,
+    "multiplier": 2
+  }
+}
