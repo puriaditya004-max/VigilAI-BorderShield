@@ -11,6 +11,7 @@ import {
   detectSuddenSpeedChange
 } from "./suspicious-activity.mjs";
 import { detectFrameTamper, detectNightMovement } from "./night-watch.mjs";
+import { processVehicleAnprFrame } from "./anpr.mjs";
 import { buildIntrusionIncident, crossedFence, FenceIncidentPolicy } from "./virtual-fence.mjs";
 import { registerCamera, sendEvidence, sendHealth, sendIncident } from "./control-client.mjs";
 import { enqueueIncident, replayOutbox } from "../../edge-agent/src/outbox.mjs";
@@ -37,6 +38,7 @@ export async function runTrackBridge({
   const trajectoryHistory = new Map();
   const latestTracks = new Map();
   const analyticsCooldowns = new Map();
+  const anprState = new Map();
   const fencePolicy = new FenceIncidentPolicy();
   const reader = readline.createInterface({ input, crlfDelay: Infinity });
 
@@ -91,9 +93,91 @@ export async function runTrackBridge({
       await publishIncident({ endpoint, incident, evidence, registered });
       emitted.push(incident);
     }
+
+    const anprIncidents = await evaluateAnprAnalytics({
+      trackEvent: accumulatedTrackEvent,
+      zones: matchingZones,
+      state: anprState,
+      cooldowns: analyticsCooldowns
+    });
+    for (const { incident, evidence } of anprIncidents) {
+      await publishIncident({ endpoint, incident, evidence, registered });
+      emitted.push(incident);
+    }
   }
 
   return emitted;
+}
+
+export async function evaluateAnprAnalytics({ trackEvent, zones, state = new Map(), cooldowns = new Map(), now = Date.parse(trackEvent.captureTime) || Date.now() }) {
+  if (trackEvent.objectClass !== "VEHICLE" || !trackEvent.frame?.uri) return [];
+  const imagePath = filePathFromUri(trackEvent.frame.uri);
+  const incidents = [];
+
+  for (const zone of zones) {
+    const config = zone.analytics?.anpr;
+    if (!config?.enabled) continue;
+    const result = await processVehicleAnprFrame({
+      imagePath,
+      cameraId: trackEvent.cameraId,
+      vehicleTrackId: trackEvent.trackId,
+      frameSize: trackEvent.coordinateSpace?.canonical || config.frameSize || { width: 1280, height: 720 },
+      captureTime: trackEvent.captureTime,
+      state,
+      voteOptions: config.voteOptions || {},
+      privacy: config.privacy || {}
+    });
+    if (!result.accepted) continue;
+
+    const decision = {
+      detected: true,
+      type: "ANPR_CANDIDATE",
+      cameraId: trackEvent.cameraId,
+      trackId: trackEvent.trackId,
+      zoneId: zone.zoneId,
+      severity: config.severity || "LOW",
+      confidence: result.confidence,
+      reasonCodes: [...result.reasonCodes, `RULE_VERSION_${zone.analytics?.ruleVersion || "analytics.v1"}`],
+      metrics: {
+        votes: result.votes,
+        candidatesConsidered: state.get(`${trackEvent.cameraId}:${trackEvent.trackId}`)?.length || 0
+      }
+    };
+    if (isCoolingDown(cooldowns, decision, now)) continue;
+    rememberCooldown(cooldowns, decision, zone, now);
+
+    const incidentHint = `inc-${trackEvent.cameraId}-anpr-${trackEvent.trackId}-${now}`;
+    const evidence = createTextEvidence({ incidentHint, trackEvent, zone });
+    evidence.metadata = {
+      ...(evidence.metadata || {}),
+      anpr: {
+        vehicleTrackId: result.vehicleTrackId,
+        maskedText: result.maskedText,
+        votes: result.votes,
+        confidence: result.confidence,
+        reasonCodes: result.reasonCodes,
+        rawTextRetained: config.retainRawText === true
+      }
+    };
+    if (config.retainRawText === true) {
+      evidence.metadata.anpr.rawTexts = result.rawTexts;
+    }
+
+    incidents.push({
+      decision,
+      evidence,
+      incident: buildAnalyticsIncident({
+        cameraId: trackEvent.cameraId,
+        zoneId: zone.zoneId,
+        trackId: trackEvent.trackId,
+        decision,
+        evidence,
+        captureTime: trackEvent.captureTime
+      })
+    });
+  }
+
+  return incidents;
 }
 
 export function evaluateIntegratedAnalytics({ trackEvent, zones, latestTracks = [], cooldowns = new Map(), now = Date.parse(trackEvent.captureTime) || Date.now() }) {
@@ -190,6 +274,11 @@ function expireTrackState({ trajectoryHistory, latestTracks, now }) {
 
 function trackKey(trackEvent) {
   return `${trackEvent.cameraId}:${trackEvent.trackId}`;
+}
+
+function filePathFromUri(uri) {
+  if (!String(uri).startsWith("file://")) throw new Error("ANPR requires a file:// frame URI");
+  return decodeURIComponent(String(uri).replace("file://", ""));
 }
 
 export function accumulateTrackTrajectory(history, trackEvent, { maxPoints = TRAJECTORY_HISTORY_POINTS } = {}) {
