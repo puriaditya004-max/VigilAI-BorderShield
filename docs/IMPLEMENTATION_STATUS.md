@@ -35,7 +35,7 @@ Verification completed on 2026-08-26:
 | Human detection and tracking | PARTIAL | `edge/vision-runtime/src/track-event-adapter.mjs`, `edge/vision-runtime/python/yolo_track_runtime.py`; fixture tested, real camera pipeline supported with canonical coordinate mapping, but accuracy not measured. |
 | Vehicle detection and classification | PARTIAL | Person/vehicle class mapping in `edge/vision-runtime/src/track-event-adapter.mjs`; fixture tested. |
 | Face detection only by default | PARTIAL | `edge/vision-runtime/src/privacy-redaction.mjs` can consume an external/OpenCV face detector runtime for redaction-only candidates and rejects biometric identity fields; field validation pending. |
-| Optional privacy blur | PARTIAL | `buildPrivacyRedactionPlan()` outputs face/plate blur actions with configurable detect-only mode; evidence artifacts can be encrypted; pixel-level media transform integration pending. |
+| Optional privacy blur | PARTIAL | `buildPrivacyRedactionPlan()` outputs face/plate blur actions with configurable detect-only mode; `applyPixelRedaction()` performs tested pixel-level blur on image buffers; evidence artifacts can be encrypted. Video-frame pipeline integration pending. |
 | ANPR / number-plate OCR | PARTIAL | Normalization, Indian plate-format validation, confidence thresholding, temporal voting and optional PaddleOCR runtime adapter in `edge/analytics/src/anpr.mjs`; field validation pending. |
 | Virtual-fence intrusion | DONE | `edge/analytics/src/virtual-fence.mjs`, bridge-side trajectory accumulation, `edge/analytics/config/zones.json`, tested by unit/integration/e2e including Python-style single-point streams. |
 | Suspicious-activity analytics | PARTIAL | Rule foundations for loitering, repeated boundary approach, crowd formation and sudden speed change are connected to `runTrackBridge()` behind zone-specific analytics config; covered by `tests/integration/analytics-to-control-api.mjs`. Field tuning pending. |
@@ -96,7 +96,7 @@ Verification completed on 2026-08-26:
 | Block biometric identity fields | DONE | `assertNoBiometricIdentityFields()` rejects `personId`, names, embeddings and match identifiers. |
 | Face privacy redaction plan | DONE | `buildPrivacyRedactionPlan()` creates bounded face blur targets and supports detect-only mode. |
 | Number-plate redaction plan | DONE | Same privacy plan supports plate blur targets separate from ANPR voting. |
-| Pixel-level blur renderer | NOT STARTED | Requires image/video frame IO integration; current module produces auditable redaction instructions only. |
+| Pixel-level blur renderer | PARTIAL | `applyPixelRedaction()` changes protected image-buffer pixels while preserving unrelated regions; covered by `tests/unit/privacy-redaction.test.mjs`. JPEG/MP4 frame IO integration pending. |
 | Low-light quality assessment | DONE | `assessLowLightQuality()` evaluates brightness/contrast against configurable thresholds. |
 | Night movement rule | PARTIAL | `detectNightMovement()` combines low-light quality and zone presence and can publish bridge incidents from frame analysis metadata; field calibration pending. |
 | Camera tamper rule | PARTIAL | `detectFrameTamper()` covers signal loss, occlusion, blackout and blur/defocus heuristics and can publish bridge incidents from frame analysis metadata. |
@@ -176,6 +176,7 @@ Verification completed on 2026-08-26:
 | Incident ingestion | DONE | `POST /api/incidents`, `incident-event.v1` |
 | Evidence manifests and hash verification | DONE | `services/evidence-service/src/manifest.mjs`, `POST /api/evidence/manifests` |
 | Visual evidence fixture | DONE | SVG keyframe generation in `edge/analytics/src/evidence.mjs` |
+| Evidence redaction metadata | DONE | Evidence manifests can carry redaction actions in `metadata.redactions`; covered by `tests/unit/evidence-service.test.mjs`. |
 | Metrics endpoint | DONE | `GET /api/metrics` |
 | Audit log | DONE | append-only audit entries in `services/control-api/src/store.mjs` |
 | Split vision-to-analytics bridge | DONE | `edge/vision-runtime/src/simulate-tracks.mjs`, `edge/analytics/src/track-bridge.mjs` |

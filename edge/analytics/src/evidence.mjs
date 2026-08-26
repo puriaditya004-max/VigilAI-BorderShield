@@ -28,8 +28,29 @@ export function createTextEvidence({ incidentHint, trackEvent, zone }) {
       }
     ],
     sha256,
+    metadata: {
+      evidenceMode: "SVG_FIXTURE",
+      redactions: []
+    },
     keyframeUri: `file://${keyframePath.replaceAll("\\", "/")}`,
     clipUri: `file://${keyframePath.replaceAll("\\", "/")}`
+  };
+}
+
+export function attachRedactionMetadata(evidence, redactions = []) {
+  return {
+    ...evidence,
+    metadata: {
+      ...(evidence.metadata || {}),
+      redactions: redactions.map((redaction) => ({
+        targetType: redaction.targetType,
+        action: redaction.action,
+        method: redaction.method,
+        bbox: redaction.bbox,
+        confidence: redaction.confidence,
+        reasonCodes: redaction.reasonCodes || []
+      }))
+    }
   };
 }
 

@@ -24,6 +24,42 @@
         }
       }
     },
-    "sha256": { "type": "string", "pattern": "^[a-f0-9]{64}$" }
+    "sha256": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+    "metadata": {
+      "type": "object",
+      "additionalProperties": true,
+      "properties": {
+        "evidenceMode": { "type": "string" },
+        "redactions": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["targetType", "action", "method", "bbox"],
+            "properties": {
+              "targetType": { "enum": ["FACE", "PLATE"] },
+              "action": { "enum": ["BLUR", "DETECT_ONLY"] },
+              "method": { "type": "string" },
+              "bbox": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["x", "y", "width", "height"],
+                "properties": {
+                  "x": { "type": "number", "minimum": 0 },
+                  "y": { "type": "number", "minimum": 0 },
+                  "width": { "type": "number", "minimum": 0 },
+                  "height": { "type": "number", "minimum": 0 }
+                }
+              },
+              "confidence": { "type": "number", "minimum": 0, "maximum": 1 },
+              "reasonCodes": {
+                "type": "array",
+                "items": { "type": "string" }
+              }
+            }
+          }
+        }
+      }
+    }
   }
 }

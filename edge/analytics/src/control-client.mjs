@@ -60,7 +60,8 @@ export async function sendEvidence({ endpoint, evidence, deviceKey, cameraId }) 
       incidentId: evidence.incidentId,
       createdAt: evidence.createdAt,
       assets: evidence.assets,
-      sha256: evidence.sha256
+      sha256: evidence.sha256,
+      metadata: evidence.metadata
     })
   });
   if (!response.ok) throw new Error(`evidence manifest failed: ${response.status}`);

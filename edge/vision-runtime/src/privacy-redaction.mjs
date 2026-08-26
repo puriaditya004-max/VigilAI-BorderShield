@@ -108,6 +108,36 @@ export function assertNoBiometricIdentityFields(candidate) {
   return true;
 }
 
+export function applyPixelRedaction({ pixels, width, height, plan, channels = 4, radius = 3 }) {
+  if (!pixels || !Number.isInteger(width) || !Number.isInteger(height)) {
+    throw new Error("pixels, width and height are required");
+  }
+  const output = Buffer.from(pixels);
+  const source = Buffer.from(pixels);
+  const actions = [];
+
+  for (const target of plan?.targets || []) {
+    if (target.action !== "BLUR") continue;
+    const box = clampBbox(target.bbox, { width, height });
+    if (box.width <= 0 || box.height <= 0) continue;
+    blurBox({ source, output, width, height, channels, box, radius });
+    actions.push({
+      targetType: target.targetType,
+      action: "BLUR",
+      method: "BOX_BLUR",
+      bbox: box,
+      confidence: target.confidence,
+      reasonCodes: target.reasonCodes || []
+    });
+  }
+
+  return {
+    pixels: output,
+    redactionApplied: actions.length > 0,
+    actions
+  };
+}
+
 function normalizeFaceDetections(payload) {
   const rows = Array.isArray(payload) ? payload : payload?.faces || payload?.detections || [];
   return rows.map((row) => ({
@@ -115,6 +145,33 @@ function normalizeFaceDetections(payload) {
     confidence: row.confidence ?? row.score ?? row.probability ?? 0,
     bbox: row.bbox || row.box || row.xyxy
   })).filter((row) => row.bbox);
+}
+
+function blurBox({ source, output, width, height, channels, box, radius }) {
+  const startX = Math.max(0, Math.floor(box.x));
+  const startY = Math.max(0, Math.floor(box.y));
+  const endX = Math.min(width, Math.ceil(box.x + box.width));
+  const endY = Math.min(height, Math.ceil(box.y + box.height));
+
+  for (let y = startY; y < endY; y += 1) {
+    for (let x = startX; x < endX; x += 1) {
+      const totals = new Array(channels).fill(0);
+      let count = 0;
+      for (let yy = Math.max(0, y - radius); yy <= Math.min(height - 1, y + radius); yy += 1) {
+        for (let xx = Math.max(0, x - radius); xx <= Math.min(width - 1, x + radius); xx += 1) {
+          const index = (yy * width + xx) * channels;
+          for (let channel = 0; channel < Math.min(3, channels); channel += 1) {
+            totals[channel] += source[index + channel];
+          }
+          count += 1;
+        }
+      }
+      const outputIndex = (y * width + x) * channels;
+      for (let channel = 0; channel < Math.min(3, channels); channel += 1) {
+        output[outputIndex + channel] = Math.round(totals[channel] / count);
+      }
+    }
+  }
 }
 
 function normalizeBbox(bbox) {

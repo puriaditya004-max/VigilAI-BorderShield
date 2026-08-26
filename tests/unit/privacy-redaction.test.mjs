@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import path from "node:path";
 import {
+  applyPixelRedaction,
   assertNoBiometricIdentityFields,
   buildFaceCandidate,
   buildPrivacyRedactionPlan,
@@ -49,6 +50,30 @@ const detectOnly = buildPrivacyRedactionPlan({
 });
 assert.equal(detectOnly.redactionRequired, false);
 assert.equal(detectOnly.targets[0].action, "DETECT_ONLY");
+
+const pixels = Buffer.alloc(8 * 8 * 4);
+for (let y = 0; y < 8; y += 1) {
+  for (let x = 0; x < 8; x += 1) {
+    const index = (y * 8 + x) * 4;
+    pixels[index] = (x + y) % 2 === 0 ? 250 : 10;
+    pixels[index + 1] = x % 2 === 0 ? 20 : 220;
+    pixels[index + 2] = y % 2 === 0 ? 30 : 210;
+    pixels[index + 3] = 255;
+  }
+}
+const redacted = applyPixelRedaction({
+  pixels,
+  width: 8,
+  height: 8,
+  radius: 1,
+  plan: {
+    targets: [{ targetType: "FACE", action: "BLUR", method: "GAUSSIAN_BLUR", bbox: { x: 2, y: 2, width: 3, height: 3 }, confidence: 0.9 }]
+  }
+});
+assert.equal(redacted.redactionApplied, true);
+assert.equal(redacted.actions.length, 1);
+assert.notDeepEqual(redacted.pixels.subarray((3 * 8 + 3) * 4, (3 * 8 + 3) * 4 + 4), pixels.subarray((3 * 8 + 3) * 4, (3 * 8 + 3) * 4 + 4));
+assert.deepEqual(redacted.pixels.subarray(0, 4), pixels.subarray(0, 4));
 
 const runtimeFaces = await detectFaceCandidatesFromImage({
   imagePath: path.resolve("tests/fixtures/face-frame.jpg"),
