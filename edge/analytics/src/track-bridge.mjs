@@ -3,7 +3,7 @@ import path from "node:path";
 import readline from "node:readline";
 import { fileURLToPath } from "node:url";
 import { createTextEvidence } from "./evidence.mjs";
-import { buildIntrusionIncident, crossedFence } from "./virtual-fence.mjs";
+import { buildIntrusionIncident, crossedFence, FenceIncidentPolicy } from "./virtual-fence.mjs";
 import { registerCamera, sendEvidence, sendHealth, sendIncident } from "./control-client.mjs";
 import { enqueueIncident, replayOutbox } from "../../edge-agent/src/outbox.mjs";
 
@@ -19,6 +19,7 @@ export async function runTrackBridge({ input = process.stdin, endpoint = API_BAS
 
   const emitted = [];
   const crossingState = new Map();
+  const fencePolicy = new FenceIncidentPolicy();
   const reader = readline.createInterface({ input, crlfDelay: Infinity });
 
   for await (const line of reader) {
@@ -48,9 +49,12 @@ export async function runTrackBridge({ input = process.stdin, endpoint = API_BAS
       if (count < (zone.persistenceFrames || 1)) continue;
 
       crossingState.delete(key);
+      const decision = fencePolicy.evaluate({ trackEvent, zone });
+      if (!decision.allowed) continue;
+
       const incidentHint = `inc-${trackEvent.cameraId}-${trackEvent.trackId}-${Date.parse(trackEvent.captureTime)}`;
       const evidence = createTextEvidence({ incidentHint, trackEvent, zone });
-      const incident = buildIntrusionIncident({ trackEvent, zone, evidence });
+      const incident = buildIntrusionIncident({ trackEvent, zone, evidence, decision });
 
       const accepted = await sendIncident({ endpoint, incident, deviceKey: registered.deviceKey }).catch(() => false);
       if (!accepted) {

@@ -6,6 +6,9 @@
     "line": { "a": { "x": 640, "y": 0 }, "b": { "x": 640, "y": 720 } },
     "direction": "LEFT_TO_RIGHT",
     "severity": "HIGH",
-    "persistenceFrames": 1
+    "persistenceFrames": 1,
+    "minTrajectoryPoints": 2,
+    "objectClasses": ["PERSON", "VEHICLE"],
+    "cooldownMs": 15000
   }
 ]

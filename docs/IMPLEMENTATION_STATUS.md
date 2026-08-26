@@ -36,9 +36,9 @@ Verification completed on 2026-08-26:
 | Vehicle detection and classification | PARTIAL | Person/vehicle class mapping in `edge/vision-runtime/src/track-event-adapter.mjs`; fixture tested. |
 | Face detection only by default | NOT STARTED | Planned privacy-preserving module; no biometric storage implemented. |
 | Optional privacy blur | NOT STARTED | No blur pipeline yet. |
-| ANPR / number-plate OCR | NOT STARTED | No detector/OCR/temporal voting module yet. |
+| ANPR / number-plate OCR | PARTIAL | Normalization, Indian plate-format validation, confidence thresholding and temporal voting foundation in `edge/analytics/src/anpr.mjs`; OCR detector integration pending. |
 | Virtual-fence intrusion | DONE | `edge/analytics/src/virtual-fence.mjs`, `edge/analytics/config/zones.json`, tested by unit/integration/e2e. |
-| Suspicious-activity analytics | NOT STARTED | No loitering, boundary approach, running, density or tamper modules yet. |
+| Suspicious-activity analytics | PARTIAL | Rule foundations for loitering, repeated boundary approach, crowd formation and sudden speed change in `edge/analytics/src/suspicious-activity.mjs`; no measured field tuning yet. |
 | Night-movement analytics | NOT STARTED | No low-light quality rule or preprocessing pipeline yet. |
 | Real-time alerting and event logging | PARTIAL | Control API incident/audit flow exists; no WebSocket/SSE yet. |
 | Command-and-control dashboard | PARTIAL | Static dashboard in `apps/command-ui/public/`; React/TypeScript HMI not implemented. |
@@ -61,6 +61,23 @@ Verification completed on 2026-08-26:
 | Configurable frame sampling | DONE | `frameSampling.targetFps` and `maxDecodeFps` validated in camera source config. |
 | CPU and NVIDIA GPU execution modes | PARTIAL | Runtime config supports `CPU`/future modes; GPU execution not tested. |
 
+## Phase 2 - Analytics Rules Foundation
+
+| Requirement | Status | Evidence |
+|---|---|---|
+| ANPR text normalization | DONE | `normalizePlateText()` in `edge/analytics/src/anpr.mjs`, covered by `tests/unit/anpr.test.mjs`. |
+| Plate-format validation | DONE | Indian registration pattern validation in `isValidIndianPlate()`. |
+| Temporal voting for ANPR | DONE | `votePlateCandidates()` requires repeated valid candidates above configurable confidence before accepting a plate. |
+| OCR/model integration for ANPR | BLOCKED | Requires detector/OCR model assets or camera footage; no fake plate accuracy claimed. |
+| Loitering detection | PARTIAL | `detectLoitering()` uses configurable dwell threshold and polygon containment. |
+| Repeated boundary approach | PARTIAL | `detectRepeatedBoundaryApproach()` uses configurable distance and count thresholds. |
+| Crowd formation | PARTIAL | `detectCrowdFormation()` counts tracked objects inside a configured polygon. |
+| Sudden speed-change detection | PARTIAL | `detectSuddenSpeedChange()` uses pixel-speed ratio and explicitly flags calibration requirement for world-speed claims. |
+| Virtual-fence object filters | DONE | `objectClasses` filter and `OBJECT_CLASS_NOT_MONITORED` decision reason in `edge/analytics/src/virtual-fence.mjs`. |
+| Virtual-fence active schedule | DONE | Optional UTC schedule evaluator in `isZoneActive()`. |
+| Virtual-fence duplicate cooldown | DONE | `FenceIncidentPolicy` suppresses duplicate alerts with `DUPLICATE_COOLDOWN_ACTIVE`. |
+| Decision reason codes | DONE | Rule outcomes include deterministic reason codes; incident reason codes include `ZONE_POLICY_MATCHED` when policy passes. |
+
 ## Implemented Foundation
 
 | Area | Status | Evidence |
@@ -75,6 +92,9 @@ Verification completed on 2026-08-26:
 | Metrics endpoint | DONE | `GET /api/metrics` |
 | Audit log | DONE | append-only audit entries in `services/control-api/src/store.mjs` |
 | Split vision-to-analytics bridge | DONE | `edge/vision-runtime/src/simulate-tracks.mjs`, `edge/analytics/src/track-bridge.mjs` |
+| ANPR rule foundation | PARTIAL | `edge/analytics/src/anpr.mjs`; OCR source pending. |
+| Suspicious-activity rule foundation | PARTIAL | `edge/analytics/src/suspicious-activity.mjs`; real-world tuning pending. |
+| Virtual-fence policy hardening | DONE | `FenceIncidentPolicy`, class filters, active schedule and cooldown in `edge/analytics/src/virtual-fence.mjs`. |
 | Docker Compose development path | PARTIAL | `deploy/compose/compose.yaml`; production hardening pending. |
 
 ## Current Verification Commands
@@ -88,10 +108,10 @@ npm run verify:stable
 
 - Device keys are stored in local JSON for development; production must store hashed keys.
 - No operator login, RBAC, MFA, rate limiting, or TLS/mTLS enforcement yet.
-- Face detection and ANPR are not implemented; no biometric embeddings are stored.
+- Face detection is not implemented; ANPR has only rule/voting foundations and no OCR model integration yet.
 - Evidence is local filesystem based; production needs encrypted storage and retention enforcement.
 - No measured accuracy, false-alert rate, or camera capacity should be claimed.
 
 ## Next Highest-Priority Phase
 
-Phase 1 should connect a real local video/RTSP source through `edge/vision-runtime/python/yolo_track_runtime.py`, produce `TrackEvent` JSON lines, and pipe them into `npm run edge:bridge`. If real footage is unavailable, add a small synthetic/generated fixture video that is legally safe to commit.
+Next priority should connect real detector outputs into the Phase 2 rule modules: feed plate OCR candidates into `votePlateCandidates()`, route suspicious-activity detections into `incident-event.v1`, and add privacy-preserving face-detection/blur foundations without identity recognition.
