@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import path from "node:path";
 import { cleanupRuntime, createRuntimeContext } from "../helpers/runtime.mjs";
-import { createMp4ClipEvidence, createPngEvidence } from "../../edge/analytics/src/evidence.mjs";
+import { createEvidenceForTrack, createMp4ClipEvidence, createPngEvidence } from "../../edge/analytics/src/evidence.mjs";
 import { readJson, validateContract } from "../../packages/contracts/src/validate-contract.mjs";
 
 const ctx = createRuntimeContext("evidence-unit");
@@ -119,6 +119,37 @@ assert.equal(clipManifest.metadata.evidenceMode, "MP4_CLIP");
 assert.equal(clipManifest.metadata.frameCount, 2);
 assert.equal(verifyEvidenceManifest(clipManifest).valid, true);
 assert.equal(validateContract(readJson("packages/contracts/schemas/evidence-manifest.schema.json"), clipManifest, "EvidenceManifest").valid, true);
+
+const sourceFramePath = path.join(ctx.evidenceDir, "source-frame.jpg");
+fs.writeFileSync(sourceFramePath, Buffer.from("real frame bytes"));
+const frameManifest = createEvidenceForTrack({
+  incidentHint: "inc-real-frame-evidence",
+  zone: {
+    zoneId: "zone-frame",
+    line: { a: { x: 10, y: 0 }, b: { x: 10, y: 16 } }
+  },
+  trackEvent: {
+    cameraId: "cam-bop-01-east",
+    trackId: "trk-frame",
+    objectClass: "PERSON",
+    confidence: 0.91,
+    bbox: { x: 1, y: 1, width: 5, height: 5 },
+    trajectory: [{ x: 3, y: 6, t: "2026-08-26T00:00:03.000Z" }],
+    captureTime: "2026-08-26T00:00:03.000Z",
+    frame: {
+      uri: `file://${sourceFramePath.replaceAll("\\", "/")}`,
+      sha256: hashFile(sourceFramePath)
+    },
+    coordinateSpace: { canonical: { width: 1280, height: 720 } }
+  }
+});
+const copiedFramePath = frameManifest.keyframeUri.replace("file://", "");
+assert.equal(fs.readFileSync(copiedFramePath, "utf8"), "real frame bytes");
+assert.equal(frameManifest.assets[0].contentType, "image/jpeg");
+assert.equal(frameManifest.metadata.evidenceMode, "REAL_FRAME_KEYFRAME");
+assert.equal(frameManifest.clipUri, null);
+assert.equal(verifyEvidenceManifest(frameManifest).valid, true);
+assert.equal(validateContract(readJson("packages/contracts/schemas/evidence-manifest.schema.json"), frameManifest, "EvidenceManifest").valid, true);
 
 cleanupRuntime(ctx);
 delete process.env.EVIDENCE_DIR;

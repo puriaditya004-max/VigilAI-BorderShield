@@ -40,6 +40,60 @@ export function createTextEvidence({ incidentHint, trackEvent, zone }) {
   };
 }
 
+export function createEvidenceForTrack({ incidentHint, trackEvent, zone, preferRealFrame = true }) {
+  if (preferRealFrame && trackEvent.frame?.uri?.startsWith("file://")) {
+    return createFrameEvidence({ incidentHint, trackEvent, zone });
+  }
+  return createTextEvidence({ incidentHint, trackEvent, zone });
+}
+
+export function createFrameEvidence({ incidentHint, trackEvent, zone }) {
+  fs.mkdirSync(evidenceDir(), { recursive: true });
+  const sourcePath = filePathFromUri(trackEvent.frame?.uri);
+  if (!fs.existsSync(sourcePath)) {
+    throw new Error(`frame evidence source is missing: ${trackEvent.frame?.uri}`);
+  }
+
+  const encrypted = hasEvidenceEncryptionKey();
+  const extension = path.extname(sourcePath) || ".jpg";
+  const keyframeName = `${incidentHint}-keyframe${extension}${encrypted ? ".enc" : ""}`;
+  const keyframePath = path.join(evidenceDir(), keyframeName);
+  const sourcePayload = fs.readFileSync(sourcePath);
+  const payload = encrypted ? encryptEvidenceBuffer(sourcePayload) : sourcePayload;
+  fs.writeFileSync(keyframePath, payload);
+  const sha256 = crypto.createHash("sha256").update(payload).digest("hex");
+  const uri = `file://${keyframePath.replaceAll("\\", "/")}`;
+
+  return {
+    schemaVersion: "evidence-manifest.v1",
+    manifestId: `manifest-${incidentHint}`,
+    incidentId: incidentHint,
+    createdAt: new Date().toISOString(),
+    assets: [
+      {
+        kind: "KEYFRAME",
+        uri,
+        sha256,
+        contentType: encrypted ? "application/octet-stream" : contentTypeForExtension(extension)
+      }
+    ],
+    sha256,
+    metadata: {
+      evidenceMode: encrypted ? "REAL_FRAME_KEYFRAME_ENCRYPTED" : "REAL_FRAME_KEYFRAME",
+      sourceFrame: {
+        uri: trackEvent.frame.uri,
+        sha256: trackEvent.frame.sha256 || null
+      },
+      frame: trackEvent.coordinateSpace?.canonical || null,
+      zoneId: zone.zoneId,
+      redactions: [],
+      clipStatus: "NOT_AVAILABLE"
+    },
+    keyframeUri: uri,
+    clipUri: null
+  };
+}
+
 export function attachRedactionMetadata(evidence, redactions = []) {
   return {
     ...evidence,
@@ -202,6 +256,18 @@ function escapeXml(value) {
     .replaceAll(">", "&gt;")
     .replaceAll('"', "&quot;")
     .replaceAll("'", "&apos;");
+}
+
+function filePathFromUri(uri) {
+  if (!String(uri || "").startsWith("file://")) throw new Error("frame evidence requires a file:// URI");
+  return decodeURIComponent(String(uri).replace("file://", ""));
+}
+
+function contentTypeForExtension(extension) {
+  const normalized = String(extension || "").toLowerCase();
+  if (normalized === ".png") return "image/png";
+  if (normalized === ".webp") return "image/webp";
+  return "image/jpeg";
 }
 
 function buildSyntheticEvidencePixels({ width, height }) {

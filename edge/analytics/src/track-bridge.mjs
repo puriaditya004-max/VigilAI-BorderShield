@@ -2,7 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import readline from "node:readline";
 import { fileURLToPath } from "node:url";
-import { createTextEvidence } from "./evidence.mjs";
+import { createEvidenceForTrack } from "./evidence.mjs";
 import { buildAnalyticsIncident } from "./incident-builder.mjs";
 import {
   detectCrowdFormation,
@@ -76,7 +76,7 @@ export async function runTrackBridge({
       if (!decision.allowed) continue;
 
       const incidentHint = `inc-${accumulatedTrackEvent.cameraId}-${accumulatedTrackEvent.trackId}-${Date.parse(accumulatedTrackEvent.captureTime)}`;
-      const evidence = createTextEvidence({ incidentHint, trackEvent: accumulatedTrackEvent, zone });
+      const evidence = createEvidenceForTrack({ incidentHint, trackEvent: accumulatedTrackEvent, zone });
       const incident = buildIntrusionIncident({ trackEvent: accumulatedTrackEvent, zone, evidence, decision });
 
       await publishIncident({ endpoint, incident, evidence, registered });
@@ -147,7 +147,7 @@ export async function evaluateAnprAnalytics({ trackEvent, zones, state = new Map
     rememberCooldown(cooldowns, decision, zone, now);
 
     const incidentHint = `inc-${trackEvent.cameraId}-anpr-${trackEvent.trackId}-${now}`;
-    const evidence = createTextEvidence({ incidentHint, trackEvent, zone });
+    const evidence = createEvidenceForTrack({ incidentHint, trackEvent, zone });
     evidence.metadata = {
       ...(evidence.metadata || {}),
       anpr: {
@@ -187,7 +187,7 @@ export function evaluateIntegratedAnalytics({ trackEvent, zones, latestTracks = 
       if (!decision.detected || isCoolingDown(cooldowns, decision, now)) continue;
       rememberCooldown(cooldowns, decision, zone, now);
       const incidentHint = `inc-${trackEvent.cameraId}-${String(decision.type).toLowerCase()}-${trackEvent.trackId || "frame"}-${now}`;
-      const evidence = createTextEvidence({ incidentHint, trackEvent, zone });
+      const evidence = createEvidenceForTrack({ incidentHint, trackEvent, zone });
       incidents.push({
         decision,
         evidence,

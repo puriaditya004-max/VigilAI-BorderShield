@@ -27,7 +27,7 @@
         "manifestId": { "type": "string" },
         "sha256": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
         "keyframeUri": { "type": "string" },
-        "clipUri": { "type": "string" }
+        "clipUri": { "type": ["string", "null"] }
       }
     }
   }
