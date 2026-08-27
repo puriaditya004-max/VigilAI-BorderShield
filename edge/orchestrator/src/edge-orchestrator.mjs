@@ -13,6 +13,7 @@ export async function runEdgeOrchestrator({
   mode,
   source,
   model,
+  keyframeDir,
   endpoint,
   env = process.env,
   log = defaultLog
@@ -22,7 +23,7 @@ export async function runEdgeOrchestrator({
   const cameraConfigPath = config.cameraConfig || "edge/edge-agent/config/camera.json";
   const camera = normalizeCameraSource(readJson(cameraConfigPath));
   const selectedMode = normalizeMode(mode || config.mode || "simulator");
-  const producer = buildProducerSpec({ config, mode: selectedMode, camera, source, model });
+  const producer = buildProducerSpec({ config, mode: selectedMode, camera, source, model, keyframeDir });
 
   const child = spawn(producer.command, producer.args, {
     cwd: process.cwd(),
@@ -69,7 +70,9 @@ export async function runEdgeOrchestrator({
 
     const incidents = await runTrackBridge({
       input: child.stdout,
-      endpoint: endpoint || config.controlApiUrl || env.CONTROL_API_URL || "http://localhost:7080"
+      endpoint: endpoint || config.controlApiUrl || env.CONTROL_API_URL || "http://localhost:7080",
+      cameraConfig: cameraConfigPath,
+      zonesConfig: config.zonesConfig || "edge/analytics/config/zones.json"
     });
     const exit = await waitForExit(child);
     if (exit.code !== 0) {
@@ -82,6 +85,7 @@ export async function runEdgeOrchestrator({
       cameraId: camera.cameraId,
       sourceType: camera.sourceType,
       runtimeMode: camera.runtime.mode,
+      keyframeDir: producer.keyframeDir || null,
       incidents: incidents.length,
       durationMs: Date.now() - startedAt
     };
@@ -92,7 +96,7 @@ export async function runEdgeOrchestrator({
   }
 }
 
-export function buildProducerSpec({ config, mode, camera, source, model }) {
+export function buildProducerSpec({ config, mode, camera, source, model, keyframeDir }) {
   const selectedMode = normalizeMode(mode);
   if (selectedMode === "simulator") {
     const spec = config.producer?.simulator || {};
@@ -108,11 +112,12 @@ export function buildProducerSpec({ config, mode, camera, source, model }) {
     const values = {
       source: source || camera.streamUri,
       cameraId: camera.cameraId,
-      model: model || spec.model || "yolov8n.pt"
+      model: model || spec.model || "yolov8n.pt",
+      keyframeDir: keyframeDir || spec.keyframeDir || defaultKeyframeDir()
     };
     return {
       command: spec.command || "python",
-      args: applyArgTemplate(spec.args || [
+      args: ensureKeyframeDirArg(applyArgTemplate(spec.args || [
         "edge/vision-runtime/python/yolo_track_runtime.py",
         "--source",
         "{source}",
@@ -120,8 +125,9 @@ export function buildProducerSpec({ config, mode, camera, source, model }) {
         "{cameraId}",
         "--model",
         "{model}"
-      ], values),
-      source: values.source
+      ], values), values.keyframeDir),
+      source: values.source,
+      keyframeDir: values.keyframeDir
     };
   }
 
@@ -130,10 +136,13 @@ export function buildProducerSpec({ config, mode, camera, source, model }) {
 
 export function parseCliArgs(argv) {
   const parsed = {};
-  for (const arg of argv) {
+  for (let index = 0; index < argv.length; index += 1) {
+    const arg = argv[index];
     if (!arg.startsWith("--")) continue;
     const [key, ...rest] = arg.slice(2).split("=");
-    parsed[key.replaceAll("-", "_")] = rest.join("=") || true;
+    const inlineValue = rest.join("=");
+    const next = argv[index + 1];
+    parsed[key.replaceAll("-", "_")] = inlineValue || (next && !next.startsWith("--") ? argv[index += 1] : true);
   }
   return parsed;
 }
@@ -146,6 +155,15 @@ function normalizeMode(mode) {
 function normalizeNodeArgs(command, args) {
   if (command === "node") return args;
   return args;
+}
+
+function ensureKeyframeDirArg(args, keyframeDir) {
+  if (args.some((arg) => arg === "--keyframe_dir" || arg === "--keyframe-dir")) return args;
+  return [...args, "--keyframe_dir", keyframeDir];
+}
+
+function defaultKeyframeDir() {
+  return path.resolve("reports/keyframes");
 }
 
 function readJson(filePath) {
@@ -171,6 +189,7 @@ if (process.argv[1] && fileURLToPath(import.meta.url) === path.resolve(process.a
     mode: args.mode,
     source: args.source,
     model: args.model,
+    keyframeDir: args.keyframe_dir,
     endpoint: args.endpoint
   }).then((summary) => {
     console.log(JSON.stringify(summary));

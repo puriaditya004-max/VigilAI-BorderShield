@@ -20,7 +20,7 @@ npm run edge:orchestrate
 Run real OpenCV/YOLO mode:
 
 ```bash
-npm run edge:orchestrate -- --mode=python-yolo --source=0 --model=yolov8n.pt
+npm run edge:orchestrate -- --mode=python-yolo --source=0 --model=yolov8n.pt --keyframe-dir=reports/keyframes
 ```
 
-The real producer still requires external Python dependencies and model files. Do not treat fixture or simulator success as measured AI accuracy.
+The orchestrator passes `--keyframe_dir` into the Python runtime so real producer `TrackEvent.frame.uri` values are populated and the analytics bridge can generate non-SVG evidence from captured keyframes. The real producer still requires external Python dependencies and model files. Do not treat fixture or simulator success as measured AI accuracy.

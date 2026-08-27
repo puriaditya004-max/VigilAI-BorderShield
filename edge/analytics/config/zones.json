@@ -9,6 +9,13 @@
     "persistenceFrames": 1,
     "minTrajectoryPoints": 2,
     "objectClasses": ["PERSON", "VEHICLE"],
-    "cooldownMs": 15000
+    "cooldownMs": 15000,
+    "analytics": {
+      "ruleVersion": "default.zone.v1",
+      "privacy": {
+        "enabled": true,
+        "face": { "enabled": true }
+      }
+    }
   }
 ]

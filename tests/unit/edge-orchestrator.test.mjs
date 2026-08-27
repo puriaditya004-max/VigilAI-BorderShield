@@ -28,8 +28,11 @@ const config = {
         "--camera-id",
         "{cameraId}",
         "--model",
-        "{model}"
+        "{model}",
+        "--keyframe_dir",
+        "{keyframeDir}"
       ],
+      keyframeDir: "reports/keyframes",
       model: "yolov8n.pt"
     }
   }
@@ -45,7 +48,8 @@ const python = buildProducerSpec({
   mode: "python-yolo",
   camera,
   source: "0",
-  model: "custom.pt"
+  model: "custom.pt",
+  keyframeDir: "tmp/keyframes"
 });
 assert.equal(python.command, "python");
 assert.deepEqual(python.args, [
@@ -55,14 +59,23 @@ assert.deepEqual(python.args, [
   "--camera-id",
   "cam-bop-01-east",
   "--model",
-  "custom.pt"
+  "custom.pt",
+  "--keyframe_dir",
+  "tmp/keyframes"
 ]);
 assert.equal(python.source, "0");
+assert.equal(python.keyframeDir, "tmp/keyframes");
 
-assert.deepEqual(parseCliArgs(["--mode=python-yolo", "--source=0", "--max-frames=10"]), {
+assert.deepEqual(parseCliArgs(["--mode=python-yolo", "--source=0", "--max-frames=10", "--keyframe-dir=reports/keyframes"]), {
   mode: "python-yolo",
   source: "0",
-  max_frames: "10"
+  max_frames: "10",
+  keyframe_dir: "reports/keyframes"
+});
+
+assert.deepEqual(parseCliArgs(["--mode", "python-yolo", "--keyframe-dir", "tmp/keyframes"]), {
+  mode: "python-yolo",
+  keyframe_dir: "tmp/keyframes"
 });
 
 console.log("PASS edge-orchestrator unit");

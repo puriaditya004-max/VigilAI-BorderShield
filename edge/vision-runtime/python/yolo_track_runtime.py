@@ -40,7 +40,7 @@ def parse_args():
     parser.add_argument("--model", default="yolov8n.pt")
     parser.add_argument("--confidence", type=float, default=0.45)
     parser.add_argument("--max-frames", type=int, default=0, help="0 means run until source ends")
-    parser.add_argument("--keyframe-dir", default="", help="Optional directory for annotated keyframe JPEGs")
+    parser.add_argument("--keyframe-dir", "--keyframe_dir", default="", help="Optional directory for annotated keyframe JPEGs")
     return parser.parse_args()
 
 

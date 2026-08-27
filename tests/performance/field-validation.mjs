@@ -17,12 +17,13 @@ const ctx = createRuntimeContext("field-validation");
 const port = await getFreePort();
 const endpoint = `http://localhost:${port}`;
 const reportPath = path.resolve(args.report || path.join(os.tmpdir(), `bordershield-field-validation-${Date.now()}.json`));
+const keyframeDir = path.resolve(args.keyframeDir || path.join(ctx.root, "keyframes"));
 let server;
 
 try {
   server = await startControlApi({ cwd: root, port, env: ctx.env });
   const startedAt = new Date();
-  const pipeline = await runPipeline({ endpoint, source: args.source, model: args.model, maxFrames: args.maxFrames, env: ctx.env });
+  const pipeline = await runPipeline({ endpoint, source: args.source, model: args.model, maxFrames: args.maxFrames, keyframeDir, env: ctx.env });
   const db = JSON.parse(fs.readFileSync(ctx.dbPath, "utf8"));
   const finishedAt = new Date();
 
@@ -33,6 +34,7 @@ try {
     db,
     source: args.source,
     model: args.model,
+    keyframeDir,
     validationMode: args.source ? "REAL_SOURCE_COMMAND" : "SIMULATED_FIXTURE"
   });
 
@@ -44,7 +46,7 @@ try {
   if (!args.keepRuntime) cleanupRuntime(ctx);
 }
 
-async function runPipeline({ endpoint, source, model, maxFrames, env }) {
+async function runPipeline({ endpoint, source, model, maxFrames, keyframeDir, env }) {
   const bridge = spawn(process.execPath, ["edge/analytics/src/track-bridge.mjs"], {
     cwd: root,
     env: { ...process.env, ...env, CONTROL_API_URL: endpoint },
@@ -52,7 +54,7 @@ async function runPipeline({ endpoint, source, model, maxFrames, env }) {
   });
 
   const producerArgs = source
-    ? ["edge/vision-runtime/python/yolo_track_runtime.py", "--source", source, "--model", model || "yolov8n.pt", "--max-frames", String(maxFrames || 200)]
+    ? ["edge/vision-runtime/python/yolo_track_runtime.py", "--source", source, "--model", model || "yolov8n.pt", "--max-frames", String(maxFrames || 200), "--keyframe_dir", keyframeDir]
     : ["edge/vision-runtime/src/simulate-tracks.mjs"];
   const producer = spawn(source ? "python" : process.execPath, producerArgs, {
     cwd: root,
@@ -68,6 +70,7 @@ async function runPipeline({ endpoint, source, model, maxFrames, env }) {
   return {
     producer: {
       command: source ? "python edge/vision-runtime/python/yolo_track_runtime.py" : "node edge/vision-runtime/src/simulate-tracks.mjs",
+      keyframeDir: source ? keyframeDir : null,
       exitCode: producerResult.code,
       stderr: producerResult.stderr.trim()
     },
@@ -80,7 +83,7 @@ async function runPipeline({ endpoint, source, model, maxFrames, env }) {
   };
 }
 
-function buildReport({ startedAt, finishedAt, pipeline, db, source, model, validationMode }) {
+function buildReport({ startedAt, finishedAt, pipeline, db, source, model, keyframeDir, validationMode }) {
   const durationMs = finishedAt.getTime() - startedAt.getTime();
   const incidents = db.incidents || [];
   const evidence = db.evidence || [];
@@ -91,6 +94,7 @@ function buildReport({ startedAt, finishedAt, pipeline, db, source, model, valid
     validationMode,
     source: source || "simulated-track-fixture",
     model: model || "simulated-fixture",
+    keyframeDir: source ? keyframeDir : null,
     durationMs,
     summary: {
       camerasRegistered: db.cameras?.length || 0,
@@ -127,10 +131,13 @@ function parseArgs(argv) {
   const parsed = {};
   for (let index = 0; index < argv.length; index += 1) {
     const arg = argv[index];
-    if (arg === "--source") parsed.source = argv[index += 1];
-    else if (arg === "--model") parsed.model = argv[index += 1];
-    else if (arg === "--report") parsed.report = argv[index += 1];
-    else if (arg === "--max-frames") parsed.maxFrames = Number(argv[index += 1]);
+    const [flag, inlineValue] = arg.split("=", 2);
+    const nextValue = () => inlineValue || argv[index += 1];
+    if (flag === "--source") parsed.source = nextValue();
+    else if (flag === "--model") parsed.model = nextValue();
+    else if (flag === "--report") parsed.report = nextValue();
+    else if (flag === "--max-frames") parsed.maxFrames = Number(nextValue());
+    else if (flag === "--keyframe-dir" || flag === "--keyframe_dir") parsed.keyframeDir = nextValue();
     else if (arg === "--keep-runtime") parsed.keepRuntime = true;
   }
   return parsed;

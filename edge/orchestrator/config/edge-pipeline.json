@@ -17,8 +17,11 @@
         "--camera-id",
         "{cameraId}",
         "--model",
-        "{model}"
+        "{model}",
+        "--keyframe_dir",
+        "{keyframeDir}"
       ],
+      "keyframeDir": "reports/keyframes",
       "model": "yolov8n.pt"
     }
   }

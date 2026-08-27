@@ -22,8 +22,10 @@ npm run validation:field
 Run against a real source after installing the Python runtime dependencies:
 
 ```bash
-npm run validation:field -- --source 0 --model yolov8n.pt --max-frames 200 --report reports/field-validation.json
+npm run validation:field -- --source 0 --model yolov8n.pt --max-frames 200 --keyframe-dir reports/keyframes --report reports/field-validation.json
 ```
+
+Real-source validation passes `--keyframe_dir` to the Python YOLO runtime so emitted `TrackEvent.frame.uri` values can produce non-SVG keyframe evidence. Treat PNG/keyframe evidence, face privacy metadata and plate redaction metadata as field-connected only after a real-source validation report shows non-SVG evidence with the expected redaction metadata.
 
 Report invariants:
 
