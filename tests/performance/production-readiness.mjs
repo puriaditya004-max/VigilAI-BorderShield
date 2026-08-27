@@ -17,7 +17,8 @@ const checks = [
   envCheck("ANPR_PLATE_DETECT_COMMAND", process.env.ANPR_PLATE_DETECT_COMMAND),
   envCheck("ANPR_OCR_COMMAND", process.env.ANPR_OCR_COMMAND),
   envCheck("FACE_DETECT_COMMAND", process.env.FACE_DETECT_COMMAND),
-  envCheck("FFMPEG_BIN", process.env.FFMPEG_BIN || "ffmpeg")
+  envCheck("FFMPEG_BIN", process.env.FFMPEG_BIN || "ffmpeg"),
+  envCheck("ALERT_WEBHOOK_URL", process.env.ALERT_WEBHOOK_URL)
 ];
 
 const blockers = checks
@@ -39,6 +40,7 @@ const report = {
   checks,
   notes: [
     "This report checks runtime prerequisites only; it does not measure model accuracy.",
+    "Configure ALERT_WEBHOOK_URL before production alert escalation drills.",
     "Real accuracy, false-alert rate and OCR quality remain NOT MEASURED without labelled footage."
   ]
 };

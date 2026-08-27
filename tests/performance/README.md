@@ -55,4 +55,4 @@ Run prerequisite checks before a real-video demonstration:
 npm run validation:production
 ```
 
-The report checks required config files and optional real-runtime dependencies such as Python, FFmpeg, model files, ANPR detector/OCR commands and face detector commands. It does not measure AI accuracy.
+The report checks required config files and optional real-runtime dependencies such as Python, FFmpeg, model files, ANPR detector/OCR commands, face detector commands and alert webhook configuration. It does not measure AI accuracy.

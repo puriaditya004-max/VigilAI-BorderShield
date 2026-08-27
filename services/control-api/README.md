@@ -37,5 +37,6 @@ Production invariants already enforced:
 - idempotent incident creation through `Idempotency-Key`
 - append-only audit records for camera and incident events
 - SSE realtime incident/lifecycle stream at `GET /api/events`
+- optional HIGH/CRITICAL alert webhook delivery with audit for delivered/failed notifications
 - operator RBAC foundation for acknowledgement, escalation and retention actions
 - request body limits, security headers and in-memory rate limiting

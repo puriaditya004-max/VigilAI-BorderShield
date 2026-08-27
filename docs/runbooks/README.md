@@ -96,3 +96,16 @@ authorization: Bearer <OPERATOR_TOKEN>   # only when OPERATOR_TOKEN is set
 ```
 
 Use `OPERATOR` for acknowledgement and `COMMANDER` for escalation or retention cleanup.
+
+## Alert Webhook
+
+Set these environment variables to forward HIGH/CRITICAL incident and commander-escalation alerts:
+
+```bash
+ALERT_WEBHOOK_URL=https://alerts.example.local/vigilai
+ALERT_WEBHOOK_TOKEN=change-me
+ALERT_MIN_SEVERITY=HIGH
+ALERT_WEBHOOK_TIMEOUT_MS=5000
+```
+
+Webhook failures do not block incident ingestion; the control API records `notification.delivered` or `notification.failed` audit events.

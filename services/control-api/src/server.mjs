@@ -8,6 +8,7 @@ import { verifyEvidenceManifest } from "../../evidence-service/src/manifest.mjs"
 import { buildRetentionSummary, expireEvidenceManifests } from "../../evidence-service/src/retention.mjs";
 import { appendAudit, ensureStore, readDb, updateDb } from "./store.mjs";
 import { badRequest, forbidden, notFound, payloadTooLarge, readJsonBody, sendJson, unauthorized, withSecurityHeaders } from "./http.mjs";
+import { notifyIncidentEvent } from "./notifier.mjs";
 import { authenticateOperator, clientRateLimitKey, createRateLimiter, hashDeviceKey, issueDeviceKey, publicCamera, publicCameraWithIssuedKey, verifyDeviceKey } from "./security.mjs";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -204,7 +205,7 @@ function rotateCameraKey(req, res, body) {
   return sendJson(res, 200, result);
 }
 
-function createIncident(req, res, body) {
+async function createIncident(req, res, body) {
   const auth = authenticateCamera(req, body.cameraId);
   if (!auth.ok) return unauthorized(res, auth.message);
 
@@ -228,10 +229,11 @@ function createIncident(req, res, body) {
     return { incident, created: true };
   });
 
+  if (result.created) await notifyAndAudit("incident.created", result.incident, idempotencyKey);
   return sendJson(res, result.created ? 201 : 200, result.incident);
 }
 
-function updateIncidentLifecycle(req, res, { incidentId, action, body }) {
+async function updateIncidentLifecycle(req, res, { incidentId, action, body }) {
   const permission = action === "acknowledge" ? "incident:acknowledge" : "incident:escalate";
   const auth = authenticateOperator(req, { requiredPermission: permission });
   if (!auth.ok) return auth.statusCode === 403 ? forbidden(res, auth.message) : unauthorized(res, auth.message);
@@ -266,7 +268,24 @@ function updateIncidentLifecycle(req, res, { incidentId, action, body }) {
   });
 
   if (!result.found) return notFound(res);
+  if (action === "escalate") await notifyAndAudit("incident.escalated", result.incident, req.headers["idempotency-key"]);
   return sendJson(res, 200, result.incident);
+}
+
+async function notifyAndAudit(eventName, incident, requestId) {
+  const result = await notifyIncidentEvent({ eventName, incident });
+  if (result.skipped) return result;
+
+  updateDb((db) => {
+    appendAudit(db, {
+      actor: "control-api",
+      action: result.delivered ? "notification.delivered" : "notification.failed",
+      resource: incident.incidentId,
+      requestId
+    });
+    return null;
+  });
+  return result;
 }
 
 function createEvidenceManifest(req, res, body) {
