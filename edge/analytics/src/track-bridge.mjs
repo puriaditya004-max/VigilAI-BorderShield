@@ -2,7 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import readline from "node:readline";
 import { fileURLToPath } from "node:url";
-import { attachRedactionMetadata, createEvidenceForTrack } from "./evidence.mjs";
+import { attachClipEvidence, attachRedactionMetadata, createEvidenceForTrack, createMp4ClipEvidence, markClipUnavailable } from "./evidence.mjs";
 import { buildAnalyticsIncident } from "./incident-builder.mjs";
 import {
   detectCrowdFormation,
@@ -11,6 +11,7 @@ import {
   detectSuddenSpeedChange
 } from "./suspicious-activity.mjs";
 import { detectFrameTamper, detectNightMovement } from "./night-watch.mjs";
+import { RollingFrameBuffer } from "./media-buffer.mjs";
 import { detectPlateCandidates, processVehicleAnprFrame } from "./anpr.mjs";
 import { buildIntrusionIncident, crossedFence, FenceIncidentPolicy } from "./virtual-fence.mjs";
 import { detectFaceCandidatesFromImage } from "../../vision-runtime/src/privacy-redaction.mjs";
@@ -27,7 +28,8 @@ export async function runTrackBridge({
   input = process.stdin,
   endpoint = API_BASE,
   cameraConfig = cameraConfigPath,
-  zonesConfig = zonesConfigPath
+  zonesConfig = zonesConfigPath,
+  createClipEvidence = createMp4ClipEvidence
 } = {}) {
   const camera = JSON.parse(fs.readFileSync(cameraConfig, "utf8"));
   const zones = JSON.parse(fs.readFileSync(zonesConfig, "utf8"));
@@ -38,6 +40,7 @@ export async function runTrackBridge({
   const crossingState = new Map();
   const trajectoryHistory = new Map();
   const latestTracks = new Map();
+  const frameBuffers = new Map();
   const analyticsCooldowns = new Map();
   const anprState = new Map();
   const fencePolicy = new FenceIncidentPolicy();
@@ -57,6 +60,7 @@ export async function runTrackBridge({
 
     if (trackEvent.schemaVersion !== "track-event.v1") continue;
     const accumulatedTrackEvent = accumulateTrackTrajectory(trajectoryHistory, trackEvent);
+    rememberTrackFrame(frameBuffers, accumulatedTrackEvent);
     latestTracks.set(trackKey(accumulatedTrackEvent), accumulatedTrackEvent);
     expireTrackState({ trajectoryHistory, latestTracks, now: Date.parse(accumulatedTrackEvent.captureTime) || Date.now() });
     const matchingZones = zones.filter((zone) => zone.cameraId === accumulatedTrackEvent.cameraId);
@@ -77,7 +81,7 @@ export async function runTrackBridge({
       if (!decision.allowed) continue;
 
       const incidentHint = `inc-${accumulatedTrackEvent.cameraId}-${accumulatedTrackEvent.trackId}-${Date.parse(accumulatedTrackEvent.captureTime)}`;
-      const evidence = await createEvidenceWithPrivacy({ incidentHint, trackEvent: accumulatedTrackEvent, zone });
+      const evidence = await createEvidenceWithPrivacy({ incidentHint, trackEvent: accumulatedTrackEvent, zone, frameBuffers, createClipEvidence });
       const incident = buildIntrusionIncident({ trackEvent: accumulatedTrackEvent, zone, evidence, decision });
 
       await publishIncident({ endpoint, incident, evidence, registered });
@@ -88,7 +92,9 @@ export async function runTrackBridge({
       trackEvent: accumulatedTrackEvent,
       zones: matchingZones,
       latestTracks: Array.from(latestTracks.values()).filter((track) => track.cameraId === accumulatedTrackEvent.cameraId),
-      cooldowns: analyticsCooldowns
+      cooldowns: analyticsCooldowns,
+      frameBuffers,
+      createClipEvidence
     });
     for (const { incident, evidence } of analyticsIncidents) {
       await publishIncident({ endpoint, incident, evidence, registered });
@@ -99,7 +105,9 @@ export async function runTrackBridge({
       trackEvent: accumulatedTrackEvent,
       zones: matchingZones,
       state: anprState,
-      cooldowns: analyticsCooldowns
+      cooldowns: analyticsCooldowns,
+      frameBuffers,
+      createClipEvidence
     });
     for (const { incident, evidence } of anprIncidents) {
       await publishIncident({ endpoint, incident, evidence, registered });
@@ -110,7 +118,15 @@ export async function runTrackBridge({
   return emitted;
 }
 
-export async function evaluateAnprAnalytics({ trackEvent, zones, state = new Map(), cooldowns = new Map(), now = Date.parse(trackEvent.captureTime) || Date.now() }) {
+export async function evaluateAnprAnalytics({
+  trackEvent,
+  zones,
+  state = new Map(),
+  cooldowns = new Map(),
+  now = Date.parse(trackEvent.captureTime) || Date.now(),
+  frameBuffers = new Map(),
+  createClipEvidence = createMp4ClipEvidence
+}) {
   if (trackEvent.objectClass !== "VEHICLE" || !trackEvent.frame?.uri) return [];
   const imagePath = filePathFromUri(trackEvent.frame.uri);
   const incidents = [];
@@ -148,7 +164,7 @@ export async function evaluateAnprAnalytics({ trackEvent, zones, state = new Map
     rememberCooldown(cooldowns, decision, zone, now);
 
     const incidentHint = `inc-${trackEvent.cameraId}-anpr-${trackEvent.trackId}-${now}`;
-    let evidence = await createEvidenceWithPrivacy({ incidentHint, trackEvent, zone });
+    let evidence = await createEvidenceWithPrivacy({ incidentHint, trackEvent, zone, frameBuffers, createClipEvidence });
     evidence = attachRedactionMetadata(evidence, [
       ...(evidence.metadata?.redactions || []),
       ...plateRedactionsFromAnprResult(result, config.privacy || {})
@@ -185,14 +201,22 @@ export async function evaluateAnprAnalytics({ trackEvent, zones, state = new Map
   return incidents;
 }
 
-export async function evaluateIntegratedAnalytics({ trackEvent, zones, latestTracks = [], cooldowns = new Map(), now = Date.parse(trackEvent.captureTime) || Date.now() }) {
+export async function evaluateIntegratedAnalytics({
+  trackEvent,
+  zones,
+  latestTracks = [],
+  cooldowns = new Map(),
+  now = Date.parse(trackEvent.captureTime) || Date.now(),
+  frameBuffers = new Map(),
+  createClipEvidence = createMp4ClipEvidence
+}) {
   const incidents = [];
   for (const zone of zones) {
     for (const decision of analyticsDecisions({ trackEvent, zone, latestTracks })) {
       if (!decision.detected || isCoolingDown(cooldowns, decision, now)) continue;
       rememberCooldown(cooldowns, decision, zone, now);
       const incidentHint = `inc-${trackEvent.cameraId}-${String(decision.type).toLowerCase()}-${trackEvent.trackId || "frame"}-${now}`;
-      const evidence = await createEvidenceWithPrivacy({ incidentHint, trackEvent, zone });
+      const evidence = await createEvidenceWithPrivacy({ incidentHint, trackEvent, zone, frameBuffers, createClipEvidence });
       incidents.push({
         decision,
         evidence,
@@ -210,8 +234,9 @@ export async function evaluateIntegratedAnalytics({ trackEvent, zones, latestTra
   return incidents;
 }
 
-async function createEvidenceWithPrivacy({ incidentHint, trackEvent, zone }) {
+async function createEvidenceWithPrivacy({ incidentHint, trackEvent, zone, frameBuffers = new Map(), createClipEvidence = createMp4ClipEvidence }) {
   let evidence = createEvidenceForTrack({ incidentHint, trackEvent, zone });
+  evidence = await attachBufferedClipIfAvailable({ evidence, incidentHint, trackEvent, frameBuffers, createClipEvidence });
   const config = zone.analytics?.privacy || {};
   const faceConfig = config.face || {};
   const plateConfig = config.plate || {};
@@ -271,6 +296,33 @@ async function createEvidenceWithPrivacy({ incidentHint, trackEvent, zone }) {
     privacy: privacyMetadata
   };
   return evidence;
+}
+
+async function attachBufferedClipIfAvailable({ evidence, incidentHint, trackEvent, frameBuffers, createClipEvidence }) {
+  if (!trackEvent.frame?.uri?.startsWith("file://")) return evidence;
+  const buffer = frameBuffers.get(trackEvent.cameraId);
+  if (!buffer) return markClipUnavailable(evidence, "FRAME_BUFFER_UNAVAILABLE");
+
+  const frames = buffer.selectWindow({
+    eventTime: trackEvent.captureTime,
+    preEventMs: Number(process.env.CLIP_PRE_EVENT_MS || 5000),
+    postEventMs: Number(process.env.CLIP_POST_EVENT_MS || 5000)
+  });
+  const minFrames = Number(process.env.CLIP_MIN_FRAMES || 2);
+  if (frames.length < minFrames) return markClipUnavailable(evidence, "INSUFFICIENT_BUFFERED_FRAMES");
+
+  try {
+    const clip = await createClipEvidence({
+      incidentHint,
+      trackEvent,
+      frames,
+      fps: Number(process.env.CLIP_FPS || 8)
+    });
+    return attachClipEvidence(evidence, clip);
+  } catch (error) {
+    const reason = String(error?.message || "").includes("ENOENT") ? "FFMPEG_UNAVAILABLE" : "CLIP_GENERATION_FAILED";
+    return markClipUnavailable(evidence, reason);
+  }
 }
 
 function plateRedactionsFromAnprResult(result, privacy = {}) {
@@ -371,6 +423,17 @@ function expireTrackState({ trajectoryHistory, latestTracks, now }) {
     latestTracks.delete(key);
     trajectoryHistory.delete(key);
   }
+}
+
+function rememberTrackFrame(frameBuffers, trackEvent) {
+  if (!trackEvent.frame?.uri?.startsWith("file://")) return;
+  const buffer = frameBuffers.get(trackEvent.cameraId) || new RollingFrameBuffer({ cameraId: trackEvent.cameraId });
+  buffer.addFrame({
+    cameraId: trackEvent.cameraId,
+    uri: trackEvent.frame.uri,
+    captureTime: trackEvent.captureTime
+  });
+  frameBuffers.set(trackEvent.cameraId, buffer);
 }
 
 function trackKey(trackEvent) {

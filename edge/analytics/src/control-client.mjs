@@ -61,6 +61,8 @@ export async function sendEvidence({ endpoint, evidence, deviceKey, cameraId }) 
       createdAt: evidence.createdAt,
       assets: evidence.assets,
       sha256: evidence.sha256,
+      keyframeUri: evidence.keyframeUri,
+      clipUri: evidence.clipUri,
       metadata: evidence.metadata
     })
   });

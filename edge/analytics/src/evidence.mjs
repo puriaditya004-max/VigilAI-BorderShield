@@ -111,6 +111,37 @@ export function attachRedactionMetadata(evidence, redactions = []) {
   };
 }
 
+export function attachClipEvidence(evidence, clipManifest) {
+  if (!clipManifest?.clipUri) return evidence;
+  return {
+    ...evidence,
+    assets: [
+      ...(evidence.assets || []),
+      ...(clipManifest.assets || [])
+    ],
+    clipUri: clipManifest.clipUri,
+    metadata: {
+      ...(evidence.metadata || {}),
+      clipStatus: "AVAILABLE",
+      clipEvidenceMode: clipManifest.metadata?.evidenceMode,
+      clipFrameCount: clipManifest.metadata?.frameCount,
+      sourceFrameWindow: clipManifest.metadata?.sourceFrameWindow
+    }
+  };
+}
+
+export function markClipUnavailable(evidence, reasonCode) {
+  return {
+    ...evidence,
+    clipUri: null,
+    metadata: {
+      ...(evidence.metadata || {}),
+      clipStatus: "NOT_AVAILABLE",
+      clipReasonCodes: [reasonCode]
+    }
+  };
+}
+
 export function createPngEvidence({
   incidentHint,
   trackEvent,
@@ -179,8 +210,9 @@ export async function createMp4ClipEvidence({
   const root = evidenceDir();
   fs.mkdirSync(root, { recursive: true });
   const sequenceDir = path.join(root, `${incidentHint}-frames`);
-  writeFrameSequence({ frames, directory: sequenceDir });
-  const inputPattern = path.join(sequenceDir, "frame-%06d.png");
+  const sequencePaths = writeFrameSequence({ frames, directory: sequenceDir });
+  const sequenceExtension = path.extname(sequencePaths[0]) || ".png";
+  const inputPattern = path.join(sequenceDir, `frame-%06d${sequenceExtension}`);
   const clipPath = path.join(root, `${incidentHint}-clip.mp4`);
   const args = buildFfmpegImageSequenceArgs({ inputPattern, outputPath: clipPath, fps });
   const result = await runClip({ ffmpeg, args });

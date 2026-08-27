@@ -35,7 +35,12 @@ try {
     source: args.source,
     model: args.model,
     keyframeDir,
-    validationMode: args.source ? "REAL_SOURCE_COMMAND" : "SIMULATED_FIXTURE"
+    validationMode: args.source ? "REAL_SOURCE_COMMAND" : "SIMULATED_FIXTURE",
+    checks: {
+      suspiciousActivity: args.checkSuspiciousActivity === true,
+      nightWatch: args.checkNightWatch === true,
+      mp4Clip: args.checkMp4Clip === true
+    }
   });
 
   fs.mkdirSync(path.dirname(reportPath), { recursive: true });
@@ -83,11 +88,12 @@ async function runPipeline({ endpoint, source, model, maxFrames, keyframeDir, en
   };
 }
 
-function buildReport({ startedAt, finishedAt, pipeline, db, source, model, keyframeDir, validationMode }) {
+function buildReport({ startedAt, finishedAt, pipeline, db, source, model, keyframeDir, validationMode, checks = {} }) {
   const durationMs = finishedAt.getTime() - startedAt.getTime();
   const incidents = db.incidents || [];
   const evidence = db.evidence || [];
   const evidenceChecks = buildEvidenceChecks(evidence);
+  const analyticsChecks = buildAnalyticsChecks({ incidents, evidence, checks });
 
   return {
     schemaVersion: "field-validation-report.v1",
@@ -109,7 +115,8 @@ function buildReport({ startedAt, finishedAt, pipeline, db, source, model, keyfr
       facePrivacyPathConnected: evidenceChecks.facePrivacyPathConnected,
       faceRedactionMetadataObserved: evidenceChecks.faceRedactionMetadataObserved,
       plateRedactionMetadataObserved: evidenceChecks.plateRedactionMetadataObserved,
-      platePrivacyPathConnected: evidenceChecks.platePrivacyPathConnected
+      platePrivacyPathConnected: evidenceChecks.platePrivacyPathConnected,
+      analyticsChecks
     },
     gates: {
       controlApiStarted: true,
@@ -124,6 +131,7 @@ function buildReport({ startedAt, finishedAt, pipeline, db, source, model, keyfr
       platePrivacyPathConnected: validationMode === "REAL_SOURCE_COMMAND" ? evidenceChecks.platePrivacyPathConnected : "not_applicable_for_simulated_fixture",
       noAccuracyClaimWithoutLabels: true
     },
+    analyticsChecks,
     evidenceChecks,
     measuredMetrics: {
       endToEndDurationMs: durationMs,
@@ -175,6 +183,29 @@ function buildEvidenceChecks(evidence) {
   };
 }
 
+function buildAnalyticsChecks({ incidents, evidence, checks }) {
+  const incidentTypes = incidents.map((incident) => incident.type);
+  const clipObserved = evidence.some((item) => item.clipUri);
+  const mp4ClipObserved = evidence.some((item) => item.clipUri && item.assets?.some((asset) => asset.kind === "CLIP" && asset.contentType === "video/mp4"));
+  return {
+    suspiciousActivity: checks.suspiciousActivity ? {
+      observed: incidentTypes.includes("SUSPICIOUS_ACTIVITY"),
+      incidentCount: incidents.filter((incident) => incident.type === "SUSPICIOUS_ACTIVITY").length
+    } : "not_requested",
+    nightWatch: checks.nightWatch ? {
+      observed: incidentTypes.some((type) => ["NIGHT_MOVEMENT", "CAMERA_TAMPER"].includes(type)),
+      nightMovementCount: incidents.filter((incident) => incident.type === "NIGHT_MOVEMENT").length,
+      cameraTamperCount: incidents.filter((incident) => incident.type === "CAMERA_TAMPER").length
+    } : "not_requested",
+    mp4Clip: checks.mp4Clip ? {
+      observed: mp4ClipObserved,
+      clipUriObserved: clipObserved,
+      clipCount: evidence.filter((item) => item.clipUri).length,
+      unavailableReasonCodes: [...new Set(evidence.flatMap((item) => item.metadata?.clipReasonCodes || []))]
+    } : "not_requested"
+  };
+}
+
 function parseArgs(argv) {
   const parsed = {};
   for (let index = 0; index < argv.length; index += 1) {
@@ -186,6 +217,9 @@ function parseArgs(argv) {
     else if (flag === "--report") parsed.report = nextValue();
     else if (flag === "--max-frames") parsed.maxFrames = Number(nextValue());
     else if (flag === "--keyframe-dir" || flag === "--keyframe_dir") parsed.keyframeDir = nextValue();
+    else if (arg === "--check-suspicious-activity") parsed.checkSuspiciousActivity = true;
+    else if (arg === "--check-night-watch") parsed.checkNightWatch = true;
+    else if (arg === "--check-mp4-clip") parsed.checkMp4Clip = true;
     else if (arg === "--keep-runtime") parsed.keepRuntime = true;
   }
   return parsed;

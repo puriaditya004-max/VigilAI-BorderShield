@@ -61,3 +61,25 @@ npm run validation:production
 ```
 
 The report checks required config files and optional real-runtime dependencies such as Python, FFmpeg, model files, ANPR detector/OCR commands, face detector commands and alert webhook configuration. It does not measure AI accuracy.
+
+## Field-Test Every Analytics Path
+
+Use the optional report flags during a real-source run:
+
+```bash
+npm run validation:field -- --source 0 --model yolov8n.pt --max-frames 400 --keyframe-dir reports/keyframes --report reports/field-validation.json --check-suspicious-activity --check-night-watch --check-mp4-clip
+```
+
+Operator actions during the run:
+
+- Walk fully across the virtual fence line to verify intrusion incidents.
+- Stand still inside the monitored area to give loitering a chance to fire if configured.
+- Approach the boundary repeatedly or move quickly across the frame to exercise boundary-approach and speed-change rules if configured.
+- Cover the lens briefly or run in a genuinely low-light scene to exercise night/tamper rules if configured.
+- Keep the subject visible for several frames so MP4 clip buffering has enough pre/post-event frames.
+
+The flags only report what was observed in the run. They do not force detections, fabricate incidents, or create accuracy claims.
+
+## Offline Replay Drill
+
+See `docs/runbooks/offline-replay-demo.md` for the manual command-link loss drill: start the API, run the real camera pipeline, stop the API mid-run, confirm outbox queueing, restart the API, and verify replayed incidents through the operator read APIs.

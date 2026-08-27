@@ -31,7 +31,7 @@ The Node adapter `ocrPlateImage()` consumes runtime JSON and then applies the ex
 Optional ANPR plate detector runtime:
 
 ```bash
-ANPR_PLATE_DETECT_COMMAND=node ANPR_PLATE_DETECT_ARGS="tests/fixtures/mock-plate-detector.mjs --image {imagePath}" npm run unit:test
+python edge/analytics/python/opencv_plate_detector.py --image frame.jpg
 ```
 
-Production use should point `ANPR_PLATE_DETECT_COMMAND` at an approved detector that returns plate bounding boxes. The pipeline rejects missing, tiny or blurry crops before OCR and keeps complete accuracy metrics as not measured until labelled footage is supplied.
+Set `ANPR_PLATE_DETECT_COMMAND=python` and `ANPR_PLATE_DETECT_ARGS="edge/analytics/python/opencv_plate_detector.py --image {imagePath}"` to enable the built-in OpenCV candidate localizer. It returns candidate bounding boxes only; it never fabricates plate text. Production use can point the same variables at an approved detector that returns plate bounding boxes. The pipeline rejects missing, tiny or blurry crops before OCR and keeps complete accuracy metrics as not measured until labelled footage is supplied.

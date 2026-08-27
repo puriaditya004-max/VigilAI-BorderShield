@@ -31,21 +31,26 @@ def main():
     except ImportError as exc:
         raise SystemExit(f"Missing OpenCV dependency: {exc}") from exc
 
-    image = cv2.imread(args.image)
-    if image is None:
-        raise SystemExit(f"Could not read image: {args.image}")
+    try:
+        image = cv2.imread(args.image)
+        if image is None:
+            raise RuntimeError(f"Could not read image: {args.image}")
 
-    gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
-    cascade_path = cv2.data.haarcascades + "haarcascade_frontalface_default.xml"
-    detector = cv2.CascadeClassifier(cascade_path)
-    if detector.empty():
-        raise SystemExit("OpenCV Haar cascade unavailable")
+        gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+        cascade_path = cv2.data.haarcascades + "haarcascade_frontalface_default.xml"
+        detector = cv2.CascadeClassifier(cascade_path)
+        if detector.empty():
+            raise RuntimeError(f"OpenCV Haar cascade unavailable: {cascade_path}")
 
-    faces = detector.detectMultiScale(
-        gray,
-        scaleFactor=args.scale_factor,
-        minNeighbors=args.min_neighbors
-    )
+        faces = detector.detectMultiScale(
+            gray,
+            scaleFactor=args.scale_factor,
+            minNeighbors=args.min_neighbors
+        )
+    except Exception as exc:
+        print(f"OpenCV face detector failed for image={args.image}: {exc}", file=sys.stderr)
+        raise SystemExit(1) from exc
+
     results = []
     for x, y, w, h in faces:
         results.append({
