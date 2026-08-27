@@ -107,11 +107,12 @@ Verification completed on 2026-08-26:
 
 | Requirement | Status | Evidence |
 |---|---|---|
-| Realtime incident delivery | DONE | `GET /api/events` emits Server-Sent Events; `tests/integration/realtime-events.mjs` verifies incident delivery. |
-| Dashboard live updates | DONE | `apps/command-ui/public/main.js` uses `EventSource` for live incident refresh with polling fallback. |
+| Realtime incident delivery | DONE | `GET /api/events` emits operator-authorized Server-Sent Events; `tests/integration/realtime-events.mjs` verifies incident delivery. |
+| Dashboard live updates | DONE | `apps/command-ui/public/main.js` consumes the SSE stream through authenticated fetch streaming with polling fallback. |
 | Security headers | DONE | `withSecurityHeaders()` applies `nosniff`, frame denial, no-referrer and resource policy to JSON/static/SSE responses. |
 | Request body size limits | DONE | `readJsonBody()` enforces configurable `MAX_JSON_BODY_BYTES` and returns 413 on oversized payloads. |
 | Invalid JSON handling | DONE | Invalid request JSON returns 400; covered by `tests/integration/control-api-hardening.mjs`. |
+| Sensitive read API authorization | DONE | Incident, evidence-manifest, audit, metrics and realtime event read endpoints require operator `incident:read` permission; dashboard fetches include operator headers. |
 | API rate limiting | PARTIAL | In-memory per-client limiter in `services/control-api/src/security.mjs`; production distributed store pending. |
 | Hashed device-key storage | DONE | New/rotated camera keys are stored as SHA-256 hashes; plaintext key is returned only on issuance. |
 | Public camera response redaction | DONE | `GET /api/cameras` removes `deviceKey` and `deviceKeyHash` fields. |
@@ -140,6 +141,7 @@ Verification completed on 2026-08-26:
 | Evidence retention policy | DONE | `expireEvidenceManifests()` marks old manifests `EXPIRED` and can delete local assets. |
 | Retention API | DONE | `POST /api/evidence/retention/run` requires COMMANDER permission and writes audit event. |
 | Retention CLI | DONE | `npm run evidence:retention` runs cleanup for scheduled jobs. |
+| Authorized evidence asset serving | DONE | `GET /api/evidence/assets/:manifestId/:assetIndex` requires operator read permission, only serves verified manifests under `EVIDENCE_DIR`, rechecks asset hashes, and is covered by `tests/integration/evidence-asset-serving.mjs`; manifest list responses expose safe asset URLs instead of raw `file://` paths. |
 | Production env template | DONE | `.env.example` documents runtime, security, rate limit and evidence lifecycle settings without secrets. |
 | Compose healthcheck | DONE | `deploy/compose/compose.yaml` waits for `control-api` health before starting `edge-bridge`. |
 | Deployment runbook | DONE | `docs/runbooks/README.md` documents smoke tests, operator workflow and retention procedure. |
@@ -196,6 +198,7 @@ Verification completed on 2026-08-26:
 | API security helpers | PARTIAL | `services/control-api/src/security.mjs` covers hashed device keys, in-memory rate limits and operator RBAC foundation. |
 | Incident acknowledgement workflow | DONE | API/UI support acknowledge and escalate actions with audit trail and SSE refresh. |
 | Evidence lifecycle controls | DONE | Optional encryption plus API/CLI retention cleanup with audit trail. |
+| Safe evidence dashboard access | DONE | Command UI opens evidence artifacts through the authorized asset endpoint instead of exposing raw filesystem paths. |
 | Docker Compose development path | PARTIAL | `deploy/compose/compose.yaml` includes env-file and healthcheck; production gateway/TLS still pending. |
 | Field validation harness | DONE | `npm run validation:field` produces auditable JSON report for fixture or real source. |
 | Production readiness check | DONE | `npm run validation:production` writes a JSON report for required config and optional real-runtime blockers such as Python, FFmpeg, model files and detector/OCR commands. |
@@ -216,12 +219,12 @@ npm run validation:production
 ## Known Security and Privacy Limitations
 
 - New and rotated device keys are hashed in local JSON; existing legacy plaintext keys are accepted only for backward compatibility until rotation.
-- Operator RBAC foundation exists, but there is no persistent login/session UI, MFA, or TLS/mTLS enforcement yet.
+- Operator RBAC protects incident actions plus sensitive incident/evidence/audit/metrics reads, but there is no persistent login/session UI, MFA, or TLS/mTLS enforcement yet.
 - Rate limiting is in-memory and single-process only; production should use a shared limiter behind the deployment gateway.
 - Face detection has a privacy-only candidate/redaction foundation and optional detector adapter; no identity recognition, matching or biometric embeddings are implemented.
 - ANPR has detector/crop/voting foundations and optional OCR adapter paths; no measured OCR or plate-detection accuracy is claimed.
 - Privacy redaction currently emits blur instructions; production video/image blur rendering still needs frame pipeline integration.
-- Evidence encryption and retention exist for local filesystem artifacts; production object storage/KMS integration is still pending.
+- Evidence encryption, retention, and authorized local asset serving exist for filesystem artifacts; production object storage/KMS integration is still pending.
 - No measured accuracy, false-alert rate, or camera capacity should be claimed.
 
 ## Next Highest-Priority Phase

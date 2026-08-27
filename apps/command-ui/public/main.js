@@ -21,6 +21,7 @@ const els = {
 
 els.refreshButton.addEventListener("click", refresh);
 els.incidentList.addEventListener("click", handleIncidentAction);
+els.evidenceList.addEventListener("click", handleEvidenceAssetOpen);
 refresh();
 connectEventStream();
 setInterval(refresh, 30000);
@@ -51,42 +52,64 @@ async function refresh() {
 }
 
 function connectEventStream() {
-  if (!("EventSource" in window)) return;
-
-  const stream = new EventSource(`${API_BASE}/api/events`);
-  stream.addEventListener("ready", () => {
-    els.apiStatus.textContent = "Live";
-    els.apiStatus.dataset.state = "online";
-  });
-  stream.addEventListener("incident.created", () => {
-    refresh();
-  });
-  stream.addEventListener("incident.acknowledged", () => {
-    refresh();
-  });
-  stream.addEventListener("incident.escalated", () => {
-    refresh();
-  });
-  stream.onerror = () => {
+  if (!("ReadableStream" in window) || !("TextDecoder" in window)) return;
+  readEventStream().catch(() => {
     els.apiStatus.textContent = "Reconnecting";
     els.apiStatus.dataset.state = "degraded";
-  };
+    setTimeout(connectEventStream, 5000);
+  });
+}
+
+async function readEventStream() {
+  const response = await fetch(`${API_BASE}/api/events`, {
+    headers: operatorHeaders()
+  });
+  if (!response.ok || !response.body) throw new Error(`/api/events ${response.status}`);
+
+  els.apiStatus.textContent = "Live";
+  els.apiStatus.dataset.state = "online";
+
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = "";
+
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) throw new Error("event stream closed");
+    buffer += decoder.decode(value, { stream: true });
+    const parsed = consumeEventMessages(buffer);
+    buffer = parsed.remainder;
+    for (const eventName of parsed.events) {
+      if (["incident.created", "incident.acknowledged", "incident.escalated"].includes(eventName)) {
+        refresh();
+      }
+    }
+  }
+}
+
+function consumeEventMessages(buffer) {
+  const parts = buffer.split("\n\n");
+  const remainder = parts.pop() || "";
+  const events = parts
+    .map((message) => message.split("\n").find((line) => line.startsWith("event: ")))
+    .filter(Boolean)
+    .map((line) => line.slice("event: ".length));
+  return { events, remainder };
 }
 
 async function getJson(path) {
-  const response = await fetch(`${API_BASE}${path}`);
+  const response = await fetch(`${API_BASE}${path}`, {
+    headers: operatorHeaders()
+  });
   if (!response.ok) throw new Error(`${path} ${response.status}`);
   return response.json();
 }
 
 async function postJson(path, body) {
-  const headers = {
+  const headers = operatorHeaders({
     "content-type": "application/json",
-    "x-operator-id": OPERATOR.id,
-    "x-operator-role": OPERATOR.role,
     "idempotency-key": `ui-${Date.now()}-${Math.random().toString(16).slice(2)}`
-  };
-  if (OPERATOR.token) headers.authorization = `Bearer ${OPERATOR.token}`;
+  });
 
   const response = await fetch(`${API_BASE}${path}`, {
     method: "POST",
@@ -95,6 +118,16 @@ async function postJson(path, body) {
   });
   if (!response.ok) throw new Error(`${path} ${response.status}`);
   return response.json();
+}
+
+function operatorHeaders(extra = {}) {
+  const headers = {
+    "x-operator-id": OPERATOR.id,
+    "x-operator-role": OPERATOR.role,
+    ...extra
+  };
+  if (OPERATOR.token) headers.authorization = `Bearer ${OPERATOR.token}`;
+  return headers;
 }
 
 function renderMetrics(cameras, incidents, audit, evidence, metrics) {
@@ -189,8 +222,39 @@ function renderEvidence(evidence) {
     <article class="row">
       <strong>${escapeHtml(manifest.status)} / ${escapeHtml(manifest.manifestId)}</strong>
       <span>${escapeHtml(manifest.incidentId)} / ${escapeHtml(manifest.sha256.slice(0, 18))}...</span>
+      ${manifest.assets?.length ? `
+        <button
+          type="button"
+          class="row-action"
+          data-evidence-manifest="${escapeHtml(manifest.manifestId)}"
+          data-evidence-asset="0"
+          data-evidence-url="${escapeHtml(manifest.assets[0].assetUrl)}"
+        >Open asset</button>
+      ` : ""}
     </article>
   `).join("") : `<div class="empty">No evidence manifests.</div>`;
+}
+
+async function handleEvidenceAssetOpen(event) {
+  const button = event.target.closest("button[data-evidence-url]");
+  if (!button) return;
+
+  button.disabled = true;
+  try {
+    const response = await fetch(`${API_BASE}${button.dataset.evidenceUrl}`, {
+      headers: operatorHeaders()
+    });
+    if (!response.ok) throw new Error(`asset ${response.status}`);
+
+    const blobUrl = URL.createObjectURL(await response.blob());
+    window.open(blobUrl, "_blank", "noopener");
+    setTimeout(() => URL.revokeObjectURL(blobUrl), 60000);
+  } catch (error) {
+    els.apiStatus.textContent = error.message;
+    els.apiStatus.dataset.state = "degraded";
+  } finally {
+    button.disabled = false;
+  }
 }
 
 function formatTime(value) {

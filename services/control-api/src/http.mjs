@@ -30,7 +30,7 @@ export function sendJson(res, statusCode, payload, extraHeaders = {}) {
     "content-type": "application/json",
     "access-control-allow-origin": "*",
     "access-control-allow-methods": "GET,POST,OPTIONS",
-    "access-control-allow-headers": "content-type,x-device-key,idempotency-key,x-camera-id",
+    "access-control-allow-headers": "content-type,x-device-key,idempotency-key,x-camera-id,x-operator-id,x-operator-role,authorization",
     ...extraHeaders
   }));
   res.end(JSON.stringify(payload, null, 2));

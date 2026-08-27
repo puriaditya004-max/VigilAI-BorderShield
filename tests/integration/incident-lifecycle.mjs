@@ -85,7 +85,9 @@ async function postJson(route, body, headers) {
 }
 
 async function fetchJson(route) {
-  const response = await fetch(`${endpoint}${route}`);
+  const response = await fetch(`${endpoint}${route}`, {
+    headers: { "x-operator-id": "viewer-1", "x-operator-role": "VIEWER" }
+  });
   if (!response.ok) throw new Error(`${route} failed with ${response.status}`);
   return response.json();
 }

@@ -62,7 +62,9 @@ try {
 }
 
 async function fetchJson(route) {
-  const response = await fetch(`${endpoint}${route}`);
+  const response = await fetch(`${endpoint}${route}`, {
+    headers: operatorHeaders()
+  });
   if (!response.ok) throw new Error(`${route} failed with ${response.status}`);
   return response.json();
 }
@@ -75,4 +77,8 @@ async function fetchText(route) {
 
 function assert(condition, message) {
   if (!condition) throw new Error(message);
+}
+
+function operatorHeaders() {
+  return { "x-operator-id": "viewer-1", "x-operator-role": "VIEWER" };
 }

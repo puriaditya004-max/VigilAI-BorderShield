@@ -57,7 +57,10 @@ function incidentPayload() {
 }
 
 async function waitForIncidentEvent(signal) {
-  const response = await fetch(`${endpoint}/api/events`, { signal });
+  const response = await fetch(`${endpoint}/api/events`, {
+    signal,
+    headers: { "x-operator-id": "viewer-1", "x-operator-role": "VIEWER" }
+  });
   if (!response.ok) throw new Error(`/api/events failed with ${response.status}`);
 
   const reader = response.body.getReader();

@@ -236,6 +236,13 @@ dd {
   font-size: 12px;
 }
 
+.row-action {
+  margin-top: 8px;
+  min-height: 32px;
+  padding: 6px 10px;
+  font-size: 12px;
+}
+
 .empty {
   color: var(--muted);
   background: var(--panel-alt);

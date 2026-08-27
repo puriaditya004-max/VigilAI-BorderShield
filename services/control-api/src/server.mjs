@@ -1,3 +1,4 @@
+import crypto from "node:crypto";
 import fs from "node:fs";
 import http from "node:http";
 import path from "node:path";
@@ -47,6 +48,8 @@ const server = http.createServer(async (req, res) => {
     }
 
     if (req.method === "GET" && url.pathname === "/api/events") {
+      const auth = authenticateOperator(req, { requiredPermission: "incident:read" });
+      if (!auth.ok) return auth.statusCode === 403 ? forbidden(res, auth.message) : unauthorized(res, auth.message);
       return openEventStream(req, res);
     }
 
@@ -84,7 +87,7 @@ const server = http.createServer(async (req, res) => {
     }
 
     if (req.method === "GET" && url.pathname === "/api/incidents") {
-      return sendJson(res, 200, readDb().incidents.slice().reverse());
+      return sendOperatorReadJson(req, res, readDb().incidents.slice().reverse());
     }
 
     if (req.method === "POST" && url.pathname === "/api/evidence/manifests") {
@@ -92,7 +95,15 @@ const server = http.createServer(async (req, res) => {
     }
 
     if (req.method === "GET" && url.pathname === "/api/evidence/manifests") {
-      return sendJson(res, 200, readDb().evidence.slice().reverse());
+      return sendOperatorReadJson(req, res, readDb().evidence.slice().reverse().map(publicEvidenceManifest));
+    }
+
+    const evidenceAssetMatch = url.pathname.match(/^\/api\/evidence\/assets\/([^/]+)\/(\d+)$/);
+    if (req.method === "GET" && evidenceAssetMatch) {
+      return serveEvidenceAsset(req, res, {
+        manifestId: decodeURIComponent(evidenceAssetMatch[1]),
+        assetIndex: Number(evidenceAssetMatch[2])
+      });
     }
 
     if (req.method === "POST" && url.pathname === "/api/evidence/retention/run") {
@@ -100,11 +111,11 @@ const server = http.createServer(async (req, res) => {
     }
 
     if (req.method === "GET" && url.pathname === "/api/audit") {
-      return sendJson(res, 200, readDb().audits.slice().reverse());
+      return sendOperatorReadJson(req, res, readDb().audits.slice().reverse());
     }
 
     if (req.method === "GET" && url.pathname === "/api/metrics") {
-      return sendJson(res, 200, buildMetrics(readDb()));
+      return sendOperatorReadJson(req, res, buildMetrics(readDb()));
     }
 
     return notFound(res);
@@ -287,6 +298,58 @@ function createEvidenceManifest(req, res, body) {
   return sendJson(res, result.created ? 201 : 200, result.manifest);
 }
 
+function sendOperatorReadJson(req, res, payload) {
+  const auth = authenticateOperator(req, { requiredPermission: "incident:read" });
+  if (!auth.ok) return auth.statusCode === 403 ? forbidden(res, auth.message) : unauthorized(res, auth.message);
+  return sendJson(res, 200, payload);
+}
+
+function publicEvidenceManifest(manifest) {
+  const { assets = [], keyframeUri, clipUri, ...safeManifest } = manifest;
+  return {
+    ...safeManifest,
+    assetCount: assets.length,
+    assets: assets.map((asset, index) => ({
+      kind: asset.kind,
+      sha256: asset.sha256,
+      contentType: asset.contentType || null,
+      assetUrl: `/api/evidence/assets/${encodeURIComponent(manifest.manifestId)}/${index}`
+    }))
+  };
+}
+
+function serveEvidenceAsset(req, res, { manifestId, assetIndex }) {
+  const auth = authenticateOperator(req, { requiredPermission: "incident:read" });
+  if (!auth.ok) return auth.statusCode === 403 ? forbidden(res, auth.message) : unauthorized(res, auth.message);
+
+  const manifest = readDb().evidence.find((item) => item.manifestId === manifestId);
+  if (!manifest || manifest.status !== "VERIFIED") return notFound(res);
+
+  const asset = manifest.assets?.[assetIndex];
+  if (!asset || !asset.uri?.startsWith("file://")) return notFound(res);
+
+  const assetPath = resolveEvidenceAssetPath(asset.uri);
+  if (!assetPath) return forbidden(res, "evidence asset path is outside configured evidence storage");
+  if (!fs.existsSync(assetPath) || !fs.statSync(assetPath).isFile()) return notFound(res);
+
+  const actualHash = verifyEvidenceAssetHash(assetPath);
+  if (actualHash !== asset.sha256) {
+    return sendJson(res, 409, {
+      error: "evidence_hash_mismatch",
+      message: "stored evidence asset does not match its verified manifest hash"
+    });
+  }
+
+  const contentType = asset.contentType || inferEvidenceContentType(assetPath);
+  res.writeHead(200, withSecurityHeaders({
+    "content-type": contentType,
+    "content-length": String(fs.statSync(assetPath).size),
+    "cache-control": "no-store",
+    "content-disposition": `inline; filename="${path.basename(assetPath).replaceAll('"', "")}"`
+  }));
+  fs.createReadStream(assetPath).pipe(res);
+}
+
 function runEvidenceRetention(req, res, body) {
   const auth = authenticateOperator(req, { requiredPermission: "incident:escalate" });
   if (!auth.ok) return auth.statusCode === 403 ? forbidden(res, auth.message) : unauthorized(res, auth.message);
@@ -320,6 +383,32 @@ function authenticateCamera(req, cameraId) {
     return { ok: false, message: "device key mismatch" };
   }
   return { ok: true, camera };
+}
+
+function resolveEvidenceAssetPath(uri) {
+  const evidenceRoot = path.resolve(process.env.EVIDENCE_DIR || path.join(root, "edge/edge-agent/data/evidence"));
+  const rawPath = decodeURIComponent(uri.replace("file://", ""));
+  const assetPath = path.resolve(rawPath);
+  const relative = path.relative(evidenceRoot, assetPath);
+  if (relative === "" || (!relative.startsWith("..") && !path.isAbsolute(relative))) {
+    return assetPath;
+  }
+  return null;
+}
+
+function verifyEvidenceAssetHash(assetPath) {
+  const buffer = fs.readFileSync(assetPath);
+  return crypto.createHash("sha256").update(buffer).digest("hex");
+}
+
+function inferEvidenceContentType(filePath) {
+  const ext = path.extname(filePath).toLowerCase();
+  if (ext === ".png") return "image/png";
+  if (ext === ".jpg" || ext === ".jpeg") return "image/jpeg";
+  if (ext === ".svg") return "image/svg+xml; charset=utf-8";
+  if (ext === ".mp4") return "video/mp4";
+  if (ext === ".txt") return "text/plain; charset=utf-8";
+  return "application/octet-stream";
 }
 
 function serveStaticUi(res, pathname) {
