@@ -6,6 +6,7 @@ import importlib.util
 import io
 import json
 import pathlib
+import sys
 
 runtime = pathlib.Path("edge/vision-runtime/python/yolo_track_runtime.py").resolve()
 spec = importlib.util.spec_from_file_location("yolo_track_runtime", runtime)
@@ -28,6 +29,11 @@ result = module.configure_capture_resolution(cap)
 stream = io.StringIO()
 module.log_capture_resolution(result, stream=stream)
 
+sys.argv = ["yolo_track_runtime.py"]
+default_args = module.parse_args()
+sys.argv = ["yolo_track_runtime.py", "--preview", "--zones-config", "custom-zones.json"]
+preview_args = module.parse_args()
+
 def event_for(source_width, source_height, xyxy):
     transform = module.build_coordinate_transform(source_width, source_height)
     return module.track_event("cam-test", {
@@ -48,7 +54,10 @@ print(json.dumps({
     "invalid": module.build_coordinate_transform(0, 720),
     "event640": event_for(640, 480, [300, 100, 340, 220]),
     "event1920": event_for(1920, 1080, [930, 150, 990, 420]),
-    "event1280": event_for(1280, 720, [620, 100, 660, 280])
+    "event1280": event_for(1280, 720, [620, 100, 660, 280]),
+    "defaultPreview": default_args.preview,
+    "previewEnabled": preview_args.preview,
+    "previewZonesConfig": preview_args.zones_config
 }))
 `;
 
@@ -100,5 +109,8 @@ assert.equal(payload.event1920.trajectory[0].x, 640);
 assert.equal(payload.event1920.trajectory[0].y, 280);
 assert.equal(payload.event1280.trajectory[0].x, 640);
 assert.equal(payload.event1280.trajectory[0].y, 280);
+assert.equal(payload.defaultPreview, false);
+assert.equal(payload.previewEnabled, true);
+assert.equal(payload.previewZonesConfig, "custom-zones.json");
 
 console.log("PASS yolo-runtime-resolution unit");

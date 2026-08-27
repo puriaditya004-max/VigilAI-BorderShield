@@ -49,7 +49,9 @@ const python = buildProducerSpec({
   camera,
   source: "0",
   model: "custom.pt",
-  keyframeDir: "tmp/keyframes"
+  keyframeDir: "tmp/keyframes",
+  preview: true,
+  zonesConfig: "tmp/zones.json"
 });
 assert.equal(python.command, "python");
 assert.deepEqual(python.args, [
@@ -61,16 +63,21 @@ assert.deepEqual(python.args, [
   "--model",
   "custom.pt",
   "--keyframe_dir",
-  "tmp/keyframes"
+  "tmp/keyframes",
+  "--zones-config",
+  "tmp/zones.json",
+  "--preview"
 ]);
 assert.equal(python.source, "0");
 assert.equal(python.keyframeDir, "tmp/keyframes");
+assert.equal(python.preview, true);
 
-assert.deepEqual(parseCliArgs(["--mode=python-yolo", "--source=0", "--max-frames=10", "--keyframe-dir=reports/keyframes"]), {
+assert.deepEqual(parseCliArgs(["--mode=python-yolo", "--source=0", "--max-frames=10", "--keyframe-dir=reports/keyframes", "--preview"]), {
   mode: "python-yolo",
   source: "0",
   max_frames: "10",
-  keyframe_dir: "reports/keyframes"
+  keyframe_dir: "reports/keyframes",
+  preview: true
 });
 
 assert.deepEqual(parseCliArgs(["--mode", "python-yolo", "--keyframe-dir", "tmp/keyframes"]), {

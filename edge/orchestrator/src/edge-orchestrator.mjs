@@ -14,6 +14,7 @@ export async function runEdgeOrchestrator({
   source,
   model,
   keyframeDir,
+  preview = false,
   endpoint,
   env = process.env,
   log = defaultLog
@@ -23,7 +24,7 @@ export async function runEdgeOrchestrator({
   const cameraConfigPath = config.cameraConfig || "edge/edge-agent/config/camera.json";
   const camera = normalizeCameraSource(readJson(cameraConfigPath));
   const selectedMode = normalizeMode(mode || config.mode || "simulator");
-  const producer = buildProducerSpec({ config, mode: selectedMode, camera, source, model, keyframeDir });
+  const producer = buildProducerSpec({ config, mode: selectedMode, camera, source, model, keyframeDir, preview, zonesConfig: config.zonesConfig || "edge/analytics/config/zones.json" });
 
   const child = spawn(producer.command, producer.args, {
     cwd: process.cwd(),
@@ -85,6 +86,7 @@ export async function runEdgeOrchestrator({
       cameraId: camera.cameraId,
       sourceType: camera.sourceType,
       runtimeMode: camera.runtime.mode,
+      preview: producer.preview === true,
       keyframeDir: producer.keyframeDir || null,
       incidents: incidents.length,
       durationMs: Date.now() - startedAt
@@ -96,7 +98,7 @@ export async function runEdgeOrchestrator({
   }
 }
 
-export function buildProducerSpec({ config, mode, camera, source, model, keyframeDir }) {
+export function buildProducerSpec({ config, mode, camera, source, model, keyframeDir, preview = false, zonesConfig = "edge/analytics/config/zones.json" }) {
   const selectedMode = normalizeMode(mode);
   if (selectedMode === "simulator") {
     const spec = config.producer?.simulator || {};
@@ -115,19 +117,27 @@ export function buildProducerSpec({ config, mode, camera, source, model, keyfram
       model: model || spec.model || "yolov8n.pt",
       keyframeDir: keyframeDir || spec.keyframeDir || defaultKeyframeDir()
     };
+    const args = ensurePreviewArg(
+      ensureZonesConfigArg(
+        ensureKeyframeDirArg(applyArgTemplate(spec.args || [
+          "edge/vision-runtime/python/yolo_track_runtime.py",
+          "--source",
+          "{source}",
+          "--camera-id",
+          "{cameraId}",
+          "--model",
+          "{model}"
+        ], values), values.keyframeDir),
+        zonesConfig
+      ),
+      preview
+    );
     return {
       command: spec.command || "python",
-      args: ensureKeyframeDirArg(applyArgTemplate(spec.args || [
-        "edge/vision-runtime/python/yolo_track_runtime.py",
-        "--source",
-        "{source}",
-        "--camera-id",
-        "{cameraId}",
-        "--model",
-        "{model}"
-      ], values), values.keyframeDir),
+      args,
       source: values.source,
-      keyframeDir: values.keyframeDir
+      keyframeDir: values.keyframeDir,
+      preview: preview === true
     };
   }
 
@@ -162,6 +172,16 @@ function ensureKeyframeDirArg(args, keyframeDir) {
   return [...args, "--keyframe_dir", keyframeDir];
 }
 
+function ensureZonesConfigArg(args, zonesConfig) {
+  if (args.some((arg) => arg === "--zones-config")) return args;
+  return [...args, "--zones-config", zonesConfig];
+}
+
+function ensurePreviewArg(args, preview) {
+  if (!preview || args.includes("--preview")) return args;
+  return [...args, "--preview"];
+}
+
 function defaultKeyframeDir() {
   return path.resolve("reports/keyframes");
 }
@@ -190,6 +210,7 @@ if (process.argv[1] && fileURLToPath(import.meta.url) === path.resolve(process.a
     source: args.source,
     model: args.model,
     keyframeDir: args.keyframe_dir,
+    preview: args.preview === true,
     endpoint: args.endpoint
   }).then((summary) => {
     console.log(JSON.stringify(summary));

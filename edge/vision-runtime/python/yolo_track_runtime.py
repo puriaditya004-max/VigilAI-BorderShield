@@ -41,6 +41,8 @@ def parse_args():
     parser.add_argument("--confidence", type=float, default=0.45)
     parser.add_argument("--max-frames", type=int, default=0, help="0 means run until source ends")
     parser.add_argument("--keyframe-dir", "--keyframe_dir", default="", help="Optional directory for annotated keyframe JPEGs")
+    parser.add_argument("--zones-config", default="edge/analytics/config/zones.json", help="Zone config used for optional live preview overlays")
+    parser.add_argument("--preview", action="store_true", help="Show interactive local HMI preview window")
     return parser.parse_args()
 
 
@@ -115,6 +117,104 @@ def transform_bbox(bbox, transform):
         "width": bbox["width"] * transform["scale"],
         "height": bbox["height"] * transform["scale"]
     }
+
+
+def source_point_from_canonical(point, transform):
+    if not transform or not transform.get("valid"):
+        return {"x": point["x"], "y": point["y"]}
+    return {
+        "x": (point["x"] - transform["padding"]["x"]) / transform["scale"],
+        "y": (point["y"] - transform["padding"]["y"]) / transform["scale"]
+    }
+
+
+def source_line_from_canonical(line, transform):
+    return {
+        "a": source_point_from_canonical(line["a"], transform),
+        "b": source_point_from_canonical(line["b"], transform)
+    }
+
+
+def side_of_line(point, line):
+    return sign((line["b"]["x"] - line["a"]["x"]) * (point["y"] - line["a"]["y"]) - (line["b"]["y"] - line["a"]["y"]) * (point["x"] - line["a"]["x"]))
+
+
+def crossed_fence(trajectory, zone):
+    if not trajectory or len(trajectory) < 2:
+        return False
+    first = trajectory[0]
+    last = trajectory[-1]
+    start_side = side_of_line(first, zone["line"])
+    end_side = side_of_line(last, zone["line"])
+    if start_side == 0 or end_side == 0 or start_side == end_side:
+        return False
+    direction = zone.get("direction", "ANY")
+    if direction == "ANY":
+        return True
+    if direction == "LEFT_TO_RIGHT":
+        return first["x"] < zone["line"]["a"]["x"] and last["x"] > zone["line"]["a"]["x"]
+    if direction == "RIGHT_TO_LEFT":
+        return first["x"] > zone["line"]["a"]["x"] and last["x"] < zone["line"]["a"]["x"]
+    return True
+
+
+def sign(value):
+    if value > 0:
+        return 1
+    if value < 0:
+        return -1
+    return 0
+
+
+def load_zones_for_camera(path, camera_id):
+    try:
+        with open(path, "r", encoding="utf-8") as handle:
+            zones = json.load(handle)
+    except Exception as exc:
+        print(f"Preview zones unavailable path={path}: {exc}", file=sys.stderr, flush=True)
+        return []
+    return [zone for zone in zones if zone.get("cameraId") == camera_id and zone.get("line")]
+
+
+def update_preview_state(state, event, zones, max_points=20):
+    key = event["trackId"]
+    history = state.get(key, [])
+    history.extend(event.get("trajectory", []))
+    deduped = []
+    seen = set()
+    for point in history:
+        point_key = (round(point["x"], 3), round(point["y"], 3), point.get("t", ""))
+        if point_key in seen:
+            continue
+        seen.add(point_key)
+        deduped.append(point)
+    state[key] = deduped[-max_points:]
+    return any(crossed_fence(state[key], zone) for zone in zones)
+
+
+def draw_preview_frame(cv2, frame, detections, zones, transform, fps, object_count, flash=False):
+    overlay = frame.copy()
+    border_color = (0, 0, 255) if flash else (40, 160, 60)
+    height, width = overlay.shape[:2]
+    cv2.rectangle(overlay, (0, 0), (max(0, width - 1), max(0, height - 1)), border_color, 6 if flash else 2)
+
+    for zone in zones:
+        source_line = source_line_from_canonical(zone["line"], transform)
+        a = (int(round(source_line["a"]["x"])), int(round(source_line["a"]["y"])))
+        b = (int(round(source_line["b"]["x"])), int(round(source_line["b"]["y"])))
+        cv2.line(overlay, a, b, (0, 215, 255), 2)
+        cv2.putText(overlay, zone.get("zoneId", "zone"), (max(8, a[0] + 8), max(24, a[1] + 24)), cv2.FONT_HERSHEY_SIMPLEX, 0.55, (0, 215, 255), 2)
+
+    for detection in detections:
+        x1, y1, x2, y2 = [int(round(value)) for value in detection["xyxy"]]
+        label = f"{object_class(detection['class_id'])} {detection['confidence']:.2f}"
+        cv2.rectangle(overlay, (x1, y1), (x2, y2), (20, 90, 255), 2)
+        cv2.putText(overlay, label, (x1, max(20, y1 - 8)), cv2.FONT_HERSHEY_SIMPLEX, 0.55, (20, 90, 255), 2)
+
+    status = f"{width}x{height} | {fps:.1f} FPS | objects {object_count}"
+    cv2.rectangle(overlay, (0, 0), (min(width, 460), 34), (20, 24, 28), -1)
+    cv2.putText(overlay, status, (10, 24), cv2.FONT_HERSHEY_SIMPLEX, 0.62, (240, 245, 245), 2)
+    return overlay
 
 
 def log_capture_resolution(resolution, stream=sys.stderr):
@@ -208,12 +308,19 @@ def main():
     log_capture_resolution(resolution)
 
     frame_count = 0
+    preview_zones = load_zones_for_camera(args.zones_config, args.camera_id) if args.preview else []
+    preview_state = {}
+    preview_flash_until = 0.0
+    last_frame_at = time.time()
     while True:
       ok, frame = cap.read()
       if not ok:
           break
 
       frame_count += 1
+      now = time.time()
+      fps = 1.0 / max(0.001, now - last_frame_at)
+      last_frame_at = now
       source_height, source_width = frame.shape[:2]
       coordinate_transform = build_coordinate_transform(source_width, source_height)
       if not coordinate_transform["valid"]:
@@ -239,7 +346,15 @@ def main():
 
       frame_analysis = calculate_frame_stats(frame, cv2)
       results = model.track(frame, persist=True, verbose=False, conf=args.confidence)[0]
+      detections_for_preview = []
       if results.boxes is None:
+          if args.preview:
+              preview_frame = draw_preview_frame(cv2, frame, detections_for_preview, preview_zones, coordinate_transform, fps, 0, time.time() < preview_flash_until)
+              cv2.imshow("VigilAI BorderShield Local HMI", preview_frame)
+              if cv2.waitKey(1) & 0xFF == ord("q"):
+                  break
+          if args.max_frames and frame_count >= args.max_frames:
+              break
           continue
 
       has_ids = results.boxes.id is not None
@@ -258,6 +373,7 @@ def main():
           }
           if has_ids and box.id is not None:
               detection["track_id"] = int(box.id[0])
+          detections_for_preview.append(detection)
 
           frame_meta = None
           if args.keyframe_dir:
@@ -270,12 +386,23 @@ def main():
               cv2.imwrite(keyframe_path, annotated)
               frame_meta = {"uri": f"file://{keyframe_path.replace(os.sep, '/')}", "sha256": sha256_file(keyframe_path)}
 
-          print(json.dumps(track_event(args.camera_id, detection, args.model, frame_meta)), flush=True)
+          event = track_event(args.camera_id, detection, args.model, frame_meta)
+          if args.preview and update_preview_state(preview_state, event, preview_zones):
+              preview_flash_until = time.time() + 0.75
+          print(json.dumps(event), flush=True)
+
+      if args.preview:
+          preview_frame = draw_preview_frame(cv2, frame, detections_for_preview, preview_zones, coordinate_transform, fps, len(detections_for_preview), time.time() < preview_flash_until)
+          cv2.imshow("VigilAI BorderShield Local HMI", preview_frame)
+          if cv2.waitKey(1) & 0xFF == ord("q"):
+              break
 
       if args.max_frames and frame_count >= args.max_frames:
           break
 
     cap.release()
+    if args.preview:
+        cv2.destroyAllWindows()
 
 
 if __name__ == "__main__":

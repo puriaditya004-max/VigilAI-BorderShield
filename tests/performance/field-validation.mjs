@@ -23,7 +23,7 @@ let server;
 try {
   server = await startControlApi({ cwd: root, port, env: ctx.env });
   const startedAt = new Date();
-  const pipeline = await runPipeline({ endpoint, source: args.source, model: args.model, maxFrames: args.maxFrames, keyframeDir, env: ctx.env });
+  const pipeline = await runPipeline({ endpoint, source: args.source, model: args.model, maxFrames: args.maxFrames, keyframeDir, preview: args.preview === true, env: ctx.env });
   const db = JSON.parse(fs.readFileSync(ctx.dbPath, "utf8"));
   const finishedAt = new Date();
 
@@ -35,6 +35,7 @@ try {
     source: args.source,
     model: args.model,
     keyframeDir,
+    preview: args.preview === true,
     validationMode: args.source ? "REAL_SOURCE_COMMAND" : "SIMULATED_FIXTURE",
     checks: {
       suspiciousActivity: args.checkSuspiciousActivity === true,
@@ -51,7 +52,7 @@ try {
   if (!args.keepRuntime) cleanupRuntime(ctx);
 }
 
-async function runPipeline({ endpoint, source, model, maxFrames, keyframeDir, env }) {
+async function runPipeline({ endpoint, source, model, maxFrames, keyframeDir, preview, env }) {
   const bridge = spawn(process.execPath, ["edge/analytics/src/track-bridge.mjs"], {
     cwd: root,
     env: { ...process.env, ...env, CONTROL_API_URL: endpoint },
@@ -59,7 +60,7 @@ async function runPipeline({ endpoint, source, model, maxFrames, keyframeDir, en
   });
 
   const producerArgs = source
-    ? ["edge/vision-runtime/python/yolo_track_runtime.py", "--source", source, "--model", model || "yolov8n.pt", "--max-frames", String(maxFrames || 200), "--keyframe_dir", keyframeDir]
+    ? withOptionalPreview(["edge/vision-runtime/python/yolo_track_runtime.py", "--source", source, "--model", model || "yolov8n.pt", "--max-frames", String(maxFrames || 200), "--keyframe_dir", keyframeDir], preview)
     : ["edge/vision-runtime/src/simulate-tracks.mjs"];
   const producer = spawn(source ? "python" : process.execPath, producerArgs, {
     cwd: root,
@@ -76,6 +77,7 @@ async function runPipeline({ endpoint, source, model, maxFrames, keyframeDir, en
     producer: {
       command: source ? "python edge/vision-runtime/python/yolo_track_runtime.py" : "node edge/vision-runtime/src/simulate-tracks.mjs",
       keyframeDir: source ? keyframeDir : null,
+      preview: source ? preview === true : false,
       exitCode: producerResult.code,
       stderr: producerResult.stderr.trim()
     },
@@ -88,7 +90,7 @@ async function runPipeline({ endpoint, source, model, maxFrames, keyframeDir, en
   };
 }
 
-function buildReport({ startedAt, finishedAt, pipeline, db, source, model, keyframeDir, validationMode, checks = {} }) {
+function buildReport({ startedAt, finishedAt, pipeline, db, source, model, keyframeDir, preview = false, validationMode, checks = {} }) {
   const durationMs = finishedAt.getTime() - startedAt.getTime();
   const incidents = db.incidents || [];
   const evidence = db.evidence || [];
@@ -102,6 +104,7 @@ function buildReport({ startedAt, finishedAt, pipeline, db, source, model, keyfr
     source: source || "simulated-track-fixture",
     model: model || "simulated-fixture",
     keyframeDir: source ? keyframeDir : null,
+    previewEnabled: source ? preview === true : false,
     durationMs,
     summary: {
       camerasRegistered: db.cameras?.length || 0,
@@ -217,10 +220,15 @@ function parseArgs(argv) {
     else if (flag === "--report") parsed.report = nextValue();
     else if (flag === "--max-frames") parsed.maxFrames = Number(nextValue());
     else if (flag === "--keyframe-dir" || flag === "--keyframe_dir") parsed.keyframeDir = nextValue();
+    else if (arg === "--preview") parsed.preview = true;
     else if (arg === "--check-suspicious-activity") parsed.checkSuspiciousActivity = true;
     else if (arg === "--check-night-watch") parsed.checkNightWatch = true;
     else if (arg === "--check-mp4-clip") parsed.checkMp4Clip = true;
     else if (arg === "--keep-runtime") parsed.keepRuntime = true;
   }
   return parsed;
+}
+
+function withOptionalPreview(args, preview) {
+  return preview ? [...args, "--preview"] : args;
 }

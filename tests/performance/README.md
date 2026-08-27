@@ -28,6 +28,14 @@ FACE_DETECT_ARGS="edge/vision-runtime/python/opencv_face_runtime.py --image {ima
 npm run validation:field -- --source 0 --model yolov8n.pt --max-frames 200 --keyframe-dir reports/keyframes --report reports/field-validation.json
 ```
 
+Add `--preview` for a manual operator/demo run:
+
+```bash
+npm run validation:field -- --source 0 --model yolov8n.pt --max-frames 200 --keyframe-dir reports/keyframes --report reports/field-validation.json --preview
+```
+
+The preview window shows the actual camera frame, real person/vehicle boxes, yellow configured fence lines, current resolution/FPS/object count, and a red border flash when the local trajectory mirror sees a fence crossing. Do not use `--preview` in CI or unattended validation because `cv2.imshow` requires an interactive display. This preview is not a replacement for the command dashboard in `apps/command-ui`.
+
 Real-source validation passes `--keyframe_dir` to the Python YOLO runtime so emitted `TrackEvent.frame.uri` values can produce non-SVG keyframe evidence. Treat PNG/keyframe evidence as field-connected after a real-source validation report shows non-SVG evidence. Treat face and plate target metadata as field-connected only after the report shows the detector path connected and the captured frames contain actual detectable faces or plates.
 
 The report includes explicit evidence gates:
