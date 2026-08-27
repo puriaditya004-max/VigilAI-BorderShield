@@ -19,6 +19,8 @@ Run the fixture-backed validation report:
 npm run validation:field
 ```
 
+The fixture report uses deterministic SVG evidence, so real-source gates such as non-SVG keyframes, face metadata and plate redaction are reported as not applicable until `--source` is supplied.
+
 Run against a real source after installing the Python runtime dependencies:
 
 ```bash

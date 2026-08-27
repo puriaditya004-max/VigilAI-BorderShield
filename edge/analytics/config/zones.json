@@ -10,12 +10,31 @@
     "minTrajectoryPoints": 2,
     "objectClasses": ["PERSON", "VEHICLE"],
     "cooldownMs": 15000,
+    "polygon": [
+      { "x": 0, "y": 0 },
+      { "x": 1280, "y": 0 },
+      { "x": 1280, "y": 720 },
+      { "x": 0, "y": 720 }
+    ],
     "analytics": {
       "ruleVersion": "default.zone.v1",
       "privacy": {
         "enabled": true,
         "face": { "enabled": true },
         "plate": { "enabled": true }
+      },
+      "suspicious": {
+        "cooldownMs": 60000,
+        "loitering": { "enabled": true, "minDwellMs": 30000, "severity": "HIGH" },
+        "repeatedBoundaryApproach": { "enabled": true, "minApproaches": 5, "thresholdPx": 90, "windowMs": 60000, "severity": "MEDIUM" },
+        "crowdFormation": { "enabled": true, "minObjects": 4, "severity": "HIGH" },
+        "suddenSpeedChange": { "enabled": true, "minRatio": 2.5, "severity": "MEDIUM" }
+      },
+      "night": {
+        "movement": { "enabled": true, "minBrightness": 0.2, "minContrast": 0.1, "severity": "HIGH" }
+      },
+      "tamper": {
+        "frameQuality": { "enabled": true, "maxBlockedRatio": 0.7, "minContrast": 0.04, "minSharpness": 0.05, "severity": "HIGH" }
       }
     }
   }

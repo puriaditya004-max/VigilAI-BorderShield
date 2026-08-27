@@ -33,8 +33,12 @@ export async function runTrackBridge({
 } = {}) {
   const camera = JSON.parse(fs.readFileSync(cameraConfig, "utf8"));
   const zones = JSON.parse(fs.readFileSync(zonesConfig, "utf8"));
-  const registered = await registerCamera({ endpoint, camera });
-  await sendHealth({ endpoint, camera, deviceKey: registered.deviceKey });
+  const registration = { value: await tryRegisterCamera({ endpoint, camera }) };
+  if (registration.value?.deviceKey) {
+    await sendHealth({ endpoint, camera, deviceKey: registration.value.deviceKey }).catch((error) => {
+      console.error(`Camera health skipped: ${error.message}`);
+    });
+  }
 
   const emitted = [];
   const crossingState = new Map();
@@ -84,7 +88,7 @@ export async function runTrackBridge({
       const evidence = await createEvidenceWithPrivacy({ incidentHint, trackEvent: accumulatedTrackEvent, zone, frameBuffers, createClipEvidence });
       const incident = buildIntrusionIncident({ trackEvent: accumulatedTrackEvent, zone, evidence, decision });
 
-      await publishIncident({ endpoint, incident, evidence, registered });
+      await publishIncident({ endpoint, incident, evidence, camera, registration });
       emitted.push(incident);
     }
 
@@ -97,7 +101,7 @@ export async function runTrackBridge({
       createClipEvidence
     });
     for (const { incident, evidence } of analyticsIncidents) {
-      await publishIncident({ endpoint, incident, evidence, registered });
+      await publishIncident({ endpoint, incident, evidence, camera, registration });
       emitted.push(incident);
     }
 
@@ -110,7 +114,7 @@ export async function runTrackBridge({
       createClipEvidence
     });
     for (const { incident, evidence } of anprIncidents) {
-      await publishIncident({ endpoint, incident, evidence, registered });
+      await publishIncident({ endpoint, incident, evidence, camera, registration });
       emitted.push(incident);
     }
   }
@@ -384,9 +388,35 @@ function withSeverity(config, zone) {
   return { ...config, severity: config.severity || zone.severity || "MEDIUM" };
 }
 
-async function publishIncident({ endpoint, incident, evidence, registered }) {
+async function tryRegisterCamera({ endpoint, camera }) {
+  try {
+    return await registerCamera({ endpoint, camera });
+  } catch (error) {
+    console.error(`Camera registration unavailable; incidents will queue until command link recovers: ${error.message}`);
+    return { deviceKey: process.env.EDGE_DEVICE_KEY || camera.deviceKey || null, offline: true };
+  }
+}
+
+async function ensureRegistered({ endpoint, camera, registration }) {
+  if (registration.value?.deviceKey && registration.value.offline !== true) return registration.value;
+  const next = await tryRegisterCamera({ endpoint, camera });
+  if (next?.deviceKey) {
+    registration.value = next;
+    await sendHealth({ endpoint, camera, deviceKey: next.deviceKey }).catch(() => {});
+  }
+  return registration.value;
+}
+
+async function publishIncident({ endpoint, incident, evidence, camera, registration }) {
+  const registered = await ensureRegistered({ endpoint, camera, registration });
+  if (!registered?.deviceKey) {
+    enqueueIncident(incident);
+    return;
+  }
+
   const accepted = await sendIncident({ endpoint, incident, deviceKey: registered.deviceKey }).catch(() => false);
   if (!accepted) {
+    registration.value = { ...registered, offline: true };
     enqueueIncident(incident);
   } else {
     await sendEvidence({ endpoint, evidence, deviceKey: registered.deviceKey, cameraId: incident.cameraId });

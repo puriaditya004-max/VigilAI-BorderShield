@@ -23,7 +23,12 @@ let server;
 try {
   server = await startControlApi({ cwd: root, port, env: ctx.env });
   const startedAt = new Date();
-  const pipeline = await runPipeline({ endpoint, source: args.source, model: args.model, maxFrames: args.maxFrames, keyframeDir, preview: args.preview === true, env: ctx.env });
+  const checks = {
+    suspiciousActivity: args.checkSuspiciousActivity === true,
+    nightWatch: args.checkNightWatch === true,
+    mp4Clip: args.checkMp4Clip === true
+  };
+  const pipeline = await runPipeline({ endpoint, source: args.source, model: args.model, maxFrames: args.maxFrames, keyframeDir, preview: args.preview === true, env: ctx.env, checks });
   const db = JSON.parse(fs.readFileSync(ctx.dbPath, "utf8"));
   const finishedAt = new Date();
 
@@ -37,11 +42,7 @@ try {
     keyframeDir,
     preview: args.preview === true,
     validationMode: args.source ? "REAL_SOURCE_COMMAND" : "SIMULATED_FIXTURE",
-    checks: {
-      suspiciousActivity: args.checkSuspiciousActivity === true,
-      nightWatch: args.checkNightWatch === true,
-      mp4Clip: args.checkMp4Clip === true
-    }
+    checks
   });
 
   fs.mkdirSync(path.dirname(reportPath), { recursive: true });
@@ -52,7 +53,7 @@ try {
   if (!args.keepRuntime) cleanupRuntime(ctx);
 }
 
-async function runPipeline({ endpoint, source, model, maxFrames, keyframeDir, preview, env }) {
+async function runPipeline({ endpoint, source, model, maxFrames, keyframeDir, preview, env, checks = {} }) {
   const bridge = spawn(process.execPath, ["edge/analytics/src/track-bridge.mjs"], {
     cwd: root,
     env: { ...process.env, ...env, CONTROL_API_URL: endpoint },
@@ -61,7 +62,7 @@ async function runPipeline({ endpoint, source, model, maxFrames, keyframeDir, pr
 
   const producerArgs = source
     ? withOptionalPreview(["edge/vision-runtime/python/yolo_track_runtime.py", "--source", source, "--model", model || "yolov8n.pt", "--max-frames", String(maxFrames || 200), "--keyframe_dir", keyframeDir], preview)
-    : ["edge/vision-runtime/src/simulate-tracks.mjs"];
+    : ["edge/vision-runtime/src/simulate-tracks.mjs", ...simulatorCheckArgs(checks)];
   const producer = spawn(source ? "python" : process.execPath, producerArgs, {
     cwd: root,
     env: { ...process.env, ...env },
@@ -90,12 +91,20 @@ async function runPipeline({ endpoint, source, model, maxFrames, keyframeDir, pr
   };
 }
 
+function simulatorCheckArgs(checks) {
+  const args = [];
+  if (checks.suspiciousActivity) args.push("--include-suspicious-activity");
+  if (checks.nightWatch) args.push("--include-night-watch");
+  return args;
+}
+
 function buildReport({ startedAt, finishedAt, pipeline, db, source, model, keyframeDir, preview = false, validationMode, checks = {} }) {
   const durationMs = finishedAt.getTime() - startedAt.getTime();
   const incidents = db.incidents || [];
   const evidence = db.evidence || [];
   const evidenceChecks = buildEvidenceChecks(evidence);
   const analyticsChecks = buildAnalyticsChecks({ incidents, evidence, checks });
+  const realSource = validationMode === "REAL_SOURCE_COMMAND";
 
   return {
     schemaVersion: "field-validation-report.v1",
@@ -113,12 +122,12 @@ function buildReport({ startedAt, finishedAt, pipeline, db, source, model, keyfr
       auditEvents: db.audits?.length || 0,
       pipelineSucceeded: pipeline.producer.exitCode === 0 && pipeline.bridge.exitCode === 0,
       evidenceModes: evidenceChecks.evidenceModes,
-      nonSvgEvidenceObserved: evidenceChecks.nonSvgEvidenceObserved,
-      facePrivacyMetadataObserved: evidenceChecks.facePrivacyMetadataObserved,
-      facePrivacyPathConnected: evidenceChecks.facePrivacyPathConnected,
-      faceRedactionMetadataObserved: evidenceChecks.faceRedactionMetadataObserved,
-      plateRedactionMetadataObserved: evidenceChecks.plateRedactionMetadataObserved,
-      platePrivacyPathConnected: evidenceChecks.platePrivacyPathConnected,
+      nonSvgEvidenceObserved: realSource ? evidenceChecks.nonSvgEvidenceObserved : "not_applicable_for_simulated_fixture",
+      facePrivacyMetadataObserved: realSource ? evidenceChecks.facePrivacyMetadataObserved : "not_applicable_for_simulated_fixture",
+      facePrivacyPathConnected: realSource ? evidenceChecks.facePrivacyPathConnected : "not_applicable_for_simulated_fixture",
+      faceRedactionMetadataObserved: realSource ? evidenceChecks.faceRedactionMetadataObserved : "not_applicable_for_simulated_fixture",
+      plateRedactionMetadataObserved: realSource ? evidenceChecks.plateRedactionMetadataObserved : "not_applicable_for_simulated_fixture",
+      platePrivacyPathConnected: realSource ? evidenceChecks.platePrivacyPathConnected : "not_applicable_for_simulated_fixture",
       analyticsChecks
     },
     gates: {
@@ -127,11 +136,11 @@ function buildReport({ startedAt, finishedAt, pipeline, db, source, model, keyfr
       analyticsBridgeExitedCleanly: pipeline.bridge.exitCode === 0,
       incidentFlowObserved: incidents.length > 0,
       evidenceFlowObserved: evidence.length > 0,
-      nonSvgEvidenceObserved: evidenceChecks.nonSvgEvidenceObserved,
-      facePrivacyMetadataObserved: validationMode === "REAL_SOURCE_COMMAND" ? evidenceChecks.facePrivacyMetadataObserved : "not_applicable_for_simulated_fixture",
-      plateRedactionMetadataObserved: validationMode === "REAL_SOURCE_COMMAND" ? evidenceChecks.plateRedactionMetadataObserved : "not_applicable_for_simulated_fixture",
-      facePrivacyPathConnected: validationMode === "REAL_SOURCE_COMMAND" ? evidenceChecks.facePrivacyPathConnected : "not_applicable_for_simulated_fixture",
-      platePrivacyPathConnected: validationMode === "REAL_SOURCE_COMMAND" ? evidenceChecks.platePrivacyPathConnected : "not_applicable_for_simulated_fixture",
+      nonSvgEvidenceObserved: realSource ? evidenceChecks.nonSvgEvidenceObserved : "not_applicable_for_simulated_fixture",
+      facePrivacyMetadataObserved: realSource ? evidenceChecks.facePrivacyMetadataObserved : "not_applicable_for_simulated_fixture",
+      plateRedactionMetadataObserved: realSource ? evidenceChecks.plateRedactionMetadataObserved : "not_applicable_for_simulated_fixture",
+      facePrivacyPathConnected: realSource ? evidenceChecks.facePrivacyPathConnected : "not_applicable_for_simulated_fixture",
+      platePrivacyPathConnected: realSource ? evidenceChecks.platePrivacyPathConnected : "not_applicable_for_simulated_fixture",
       noAccuracyClaimWithoutLabels: true
     },
     analyticsChecks,
