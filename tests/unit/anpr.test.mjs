@@ -75,7 +75,9 @@ assert.equal(detector.detections.length, 1);
 assert(detector.reasonCodes.includes("PLATE_CROP_READY"));
 
 const state = new Map();
+let cropPathUsedByOcr = false;
 for (let index = 0; index < 3; index += 1) {
+  const cropPath = path.resolve("tests/fixtures/plate-crop.jpg");
   const anpr = await processVehicleAnprFrame({
     imagePath: path.resolve("tests/fixtures/vehicle-frame.jpg"),
     cameraId: "cam-1",
@@ -89,14 +91,17 @@ for (let index = 0; index < 3; index += 1) {
       frameSize,
       captureTime,
       command: process.execPath,
-      args: ["tests/fixtures/mock-plate-detector.mjs", "--image", "{imagePath}"]
+      args: ["tests/fixtures/mock-plate-detector.mjs", "--image", "{imagePath}", "--crop", cropPath]
     }),
-    ocr: async ({ cameraId, trackId, captureTime }) => ({
-      candidates: [
-        buildPlateCandidate({ cameraId, trackId, rawText: "MH 12 AB 1234", confidence: 0.9, captureTime })
-      ],
-      reasonCodes: ["OCR_TEXT_EXTRACTED"]
-    }),
+    ocr: async ({ imagePath, cameraId, trackId, captureTime }) => {
+      cropPathUsedByOcr = cropPathUsedByOcr || imagePath === cropPath;
+      return {
+        candidates: [
+          buildPlateCandidate({ cameraId, trackId, rawText: "MH 12 AB 1234", confidence: 0.9, captureTime })
+        ],
+        reasonCodes: ["OCR_TEXT_EXTRACTED"]
+      };
+    },
     voteOptions: { minVotes: 3, minConfidence: 0.65 },
     privacy: { enabled: true }
   });
@@ -108,6 +113,7 @@ for (let index = 0; index < 3; index += 1) {
     assert(anpr.reasonCodes.includes("ACCEPTED_TEMPORAL_VOTE"));
   }
 }
+assert.equal(cropPathUsedByOcr, true);
 
 assert.equal(maskPlateValue("MH12AB1234"), "MH****1234");
 assert.equal(maskPlateValue("MH12AB1234", { enabled: false }), "MH12AB1234");

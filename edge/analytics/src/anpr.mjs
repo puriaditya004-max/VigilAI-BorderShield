@@ -42,6 +42,8 @@ export function buildPlateDetection({ cameraId, trackId, detection, frameSize, c
     cameraId,
     trackId,
     bbox,
+    cropPath: detection.cropPath || filePathFromOptionalUri(detection.cropUri),
+    cropUri: detection.cropUri || (detection.cropPath ? `file://${String(detection.cropPath).replaceAll("\\", "/")}` : undefined),
     confidence: clampConfidence(detection.confidence ?? detection.score ?? detection.probability),
     captureTime,
     quality,
@@ -206,18 +208,22 @@ export async function processVehicleAnprFrame({
 
   const candidates = [];
   for (const detection of detected.detections.filter((item) => item.quality.accepted)) {
+    const ocrImagePath = detection.cropPath || imagePath;
     const ocrResult = await ocr({
-      imagePath,
+      imagePath: ocrImagePath,
       cameraId,
       trackId: vehicleTrackId,
       captureTime,
-      voteOptions: { minVotes: 1, minConfidence: voteOptions.minConfidence ?? 0.65 }
+      voteOptions: { minVotes: 1, minConfidence: voteOptions.minConfidence ?? 0.65 },
+      detection
     });
     if (ocrResult.reasonCodes?.includes("OCR_ENGINE_UNAVAILABLE")) {
       return { accepted: false, reasonCodes: ["OCR_UNAVAILABLE"], detections: detected.detections };
     }
     candidates.push(...(ocrResult.candidates || []));
     detection.ocr = {
+      imagePath: ocrImagePath,
+      usedPlateCrop: Boolean(detection.cropPath),
       rawTexts: (ocrResult.candidates || []).map((candidate) => candidate.rawText),
       reasonCodes: ocrResult.reasonCodes || []
     };
@@ -257,6 +263,11 @@ function normalizeOcrRows(payload) {
 function normalizePlateDetections(payload) {
   const rows = Array.isArray(payload) ? payload : payload?.plates || payload?.detections || [];
   return rows.filter((row) => row.bbox || row.box || row.xyxy);
+}
+
+function filePathFromOptionalUri(uri) {
+  if (!uri || !String(uri).startsWith("file://")) return undefined;
+  return decodeURIComponent(String(uri).replace("file://", ""));
 }
 
 function normalizeBbox(bbox) {

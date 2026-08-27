@@ -2,7 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import readline from "node:readline";
 import { fileURLToPath } from "node:url";
-import { createEvidenceForTrack } from "./evidence.mjs";
+import { attachRedactionMetadata, createEvidenceForTrack } from "./evidence.mjs";
 import { buildAnalyticsIncident } from "./incident-builder.mjs";
 import {
   detectCrowdFormation,
@@ -13,6 +13,7 @@ import {
 import { detectFrameTamper, detectNightMovement } from "./night-watch.mjs";
 import { processVehicleAnprFrame } from "./anpr.mjs";
 import { buildIntrusionIncident, crossedFence, FenceIncidentPolicy } from "./virtual-fence.mjs";
+import { detectFaceCandidatesFromImage } from "../../vision-runtime/src/privacy-redaction.mjs";
 import { registerCamera, sendEvidence, sendHealth, sendIncident } from "./control-client.mjs";
 import { enqueueIncident, replayOutbox } from "../../edge-agent/src/outbox.mjs";
 
@@ -76,14 +77,14 @@ export async function runTrackBridge({
       if (!decision.allowed) continue;
 
       const incidentHint = `inc-${accumulatedTrackEvent.cameraId}-${accumulatedTrackEvent.trackId}-${Date.parse(accumulatedTrackEvent.captureTime)}`;
-      const evidence = createEvidenceForTrack({ incidentHint, trackEvent: accumulatedTrackEvent, zone });
+      const evidence = await createEvidenceWithPrivacy({ incidentHint, trackEvent: accumulatedTrackEvent, zone });
       const incident = buildIntrusionIncident({ trackEvent: accumulatedTrackEvent, zone, evidence, decision });
 
       await publishIncident({ endpoint, incident, evidence, registered });
       emitted.push(incident);
     }
 
-    const analyticsIncidents = evaluateIntegratedAnalytics({
+    const analyticsIncidents = await evaluateIntegratedAnalytics({
       trackEvent: accumulatedTrackEvent,
       zones: matchingZones,
       latestTracks: Array.from(latestTracks.values()).filter((track) => track.cameraId === accumulatedTrackEvent.cameraId),
@@ -147,7 +148,11 @@ export async function evaluateAnprAnalytics({ trackEvent, zones, state = new Map
     rememberCooldown(cooldowns, decision, zone, now);
 
     const incidentHint = `inc-${trackEvent.cameraId}-anpr-${trackEvent.trackId}-${now}`;
-    const evidence = createEvidenceForTrack({ incidentHint, trackEvent, zone });
+    let evidence = await createEvidenceWithPrivacy({ incidentHint, trackEvent, zone });
+    evidence = attachRedactionMetadata(evidence, [
+      ...(evidence.metadata?.redactions || []),
+      ...plateRedactionsFromAnprResult(result, config.privacy || {})
+    ]);
     evidence.metadata = {
       ...(evidence.metadata || {}),
       anpr: {
@@ -180,14 +185,14 @@ export async function evaluateAnprAnalytics({ trackEvent, zones, state = new Map
   return incidents;
 }
 
-export function evaluateIntegratedAnalytics({ trackEvent, zones, latestTracks = [], cooldowns = new Map(), now = Date.parse(trackEvent.captureTime) || Date.now() }) {
+export async function evaluateIntegratedAnalytics({ trackEvent, zones, latestTracks = [], cooldowns = new Map(), now = Date.parse(trackEvent.captureTime) || Date.now() }) {
   const incidents = [];
   for (const zone of zones) {
     for (const decision of analyticsDecisions({ trackEvent, zone, latestTracks })) {
       if (!decision.detected || isCoolingDown(cooldowns, decision, now)) continue;
       rememberCooldown(cooldowns, decision, zone, now);
       const incidentHint = `inc-${trackEvent.cameraId}-${String(decision.type).toLowerCase()}-${trackEvent.trackId || "frame"}-${now}`;
-      const evidence = createEvidenceForTrack({ incidentHint, trackEvent, zone });
+      const evidence = await createEvidenceWithPrivacy({ incidentHint, trackEvent, zone });
       incidents.push({
         decision,
         evidence,
@@ -203,6 +208,58 @@ export function evaluateIntegratedAnalytics({ trackEvent, zones, latestTracks = 
     }
   }
   return incidents;
+}
+
+async function createEvidenceWithPrivacy({ incidentHint, trackEvent, zone }) {
+  let evidence = createEvidenceForTrack({ incidentHint, trackEvent, zone });
+  const config = zone.analytics?.privacy || {};
+  const faceConfig = config.face || {};
+  const enabled = config.enabled === true || faceConfig.enabled === true;
+  if (!enabled || !trackEvent.frame?.uri?.startsWith("file://")) return evidence;
+
+  const faceResult = await detectFaceCandidatesFromImage({
+    imagePath: filePathFromUri(trackEvent.frame.uri),
+    cameraId: trackEvent.cameraId,
+    frameTime: trackEvent.captureTime,
+    frameSize: trackEvent.coordinateSpace?.canonical || config.frameSize || { width: 1280, height: 720 },
+    command: faceConfig.command || process.env.FACE_DETECT_COMMAND,
+    args: faceConfig.args
+  });
+
+  evidence = attachRedactionMetadata(evidence, [
+    ...(evidence.metadata?.redactions || []),
+    ...(faceResult.redactionPlan?.targets || [])
+  ]);
+  evidence.metadata = {
+    ...(evidence.metadata || {}),
+    privacy: {
+      ...(evidence.metadata?.privacy || {}),
+      faceDetection: {
+        enabled: true,
+        candidates: faceResult.candidates.length,
+        identityRecognition: false,
+        reasonCodes: faceResult.reasonCodes || [],
+        error: faceResult.error || undefined
+      }
+    }
+  };
+  return evidence;
+}
+
+function plateRedactionsFromAnprResult(result, privacy = {}) {
+  const enabled = privacy.enabled !== false;
+  return (result.detections || [])
+    .filter((detection) => detection.quality?.accepted)
+    .map((detection) => ({
+      targetType: "PLATE",
+      action: enabled ? "BLUR" : "DETECT_ONLY",
+      method: enabled ? "GAUSSIAN_BLUR" : "NONE",
+      bbox: detection.bbox,
+      confidence: detection.confidence,
+      reasonCodes: enabled
+        ? ["PLATE_PRIVACY_REDACTION_ENABLED", "ANPR_PLATE_DETECTION_ACCEPTED"]
+        : ["PLATE_DETECTED_REDACTION_DISABLED", "ANPR_PLATE_DETECTION_ACCEPTED"]
+    }));
 }
 
 function analyticsDecisions({ trackEvent, zone, latestTracks }) {
