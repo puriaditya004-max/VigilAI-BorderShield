@@ -40,7 +40,7 @@ Verification completed on 2026-08-26:
 | Virtual-fence intrusion | DONE | `edge/analytics/src/virtual-fence.mjs`, bridge-side trajectory accumulation, `edge/analytics/config/zones.json`, tested by unit/integration/e2e including Python-style single-point streams. |
 | Suspicious-activity analytics | PARTIAL | Rule foundations for loitering, repeated boundary approach, crowd formation and sudden speed change are connected to `runTrackBridge()` behind zone-specific analytics config; covered by `tests/integration/analytics-to-control-api.mjs`. Field tuning pending. |
 | Night-movement analytics | PARTIAL | Python runtime can emit frame stats and bridge feeds configured low-light movement into incidents; covered by `tests/integration/analytics-to-control-api.mjs`. Camera-specific tuning pending. |
-| Real-time alerting and event logging | PARTIAL | Incident/audit flow plus SSE incident stream and operator lifecycle updates; full notification escalation pending. |
+| Real-time alerting and event logging | PARTIAL | Incident/audit flow, operator-authorized SSE stream, operator lifecycle updates and optional HIGH/CRITICAL webhook notifications are implemented; full multi-channel notification escalation pending. |
 | Command-and-control dashboard | PARTIAL | Static dashboard consumes live SSE incident updates, supports acknowledge/escalate actions and keeps polling fallback; React/TypeScript HMI not implemented. |
 | Existing CCTV/RTSP compatibility | PARTIAL | Python runtime accepts OpenCV sources including RTSP and maps source-frame detections into the canonical 1280x720 zone coordinate space; ONVIF discovery not implemented. |
 | Offline edge operation and synchronization | PARTIAL | Durable JSON outbox and replay in `edge/edge-agent/src/outbox.mjs`; evidence encryption is optional, bounded rolling frame buffer foundation exists, encrypted rolling video buffer pending. |
@@ -130,6 +130,7 @@ Verification completed on 2026-08-26:
 | Incident escalation | DONE | `POST /api/incidents/:incidentId/escalate` sets status, target, actor, timestamp and audit entry. |
 | Lifecycle realtime events | DONE | Acknowledge/escalate actions publish SSE events consumed by the dashboard. |
 | Dashboard command actions | DONE | Incident cards show acknowledge/escalate buttons for open incidents. |
+| Alert webhook delivery | DONE | `ALERT_WEBHOOK_URL` sends HIGH/CRITICAL incident and commander-escalation notifications with bearer-token support and delivered/failed audit entries; covered by `tests/unit/notifier.test.mjs` and `tests/integration/notification-webhook.mjs`. |
 | Human-in-the-loop critical alert handling | PARTIAL | Critical incidents can be acknowledged/escalated by operators; formal SLA/escalation policy pending. |
 
 ## Phase 6 - Evidence Lifecycle and Deployment Readiness
@@ -197,6 +198,7 @@ Verification completed on 2026-08-26:
 | Realtime incident stream | DONE | SSE stream in `services/control-api/src/server.mjs`; dashboard subscribes through `EventSource`. |
 | API security helpers | PARTIAL | `services/control-api/src/security.mjs` covers hashed device keys, in-memory rate limits and operator RBAC foundation. |
 | Incident acknowledgement workflow | DONE | API/UI support acknowledge and escalate actions with audit trail and SSE refresh. |
+| Alert notification workflow | DONE | Optional webhook notifier in `services/control-api/src/notifier.mjs` delivers incident/escalation alerts and records notification audit events. |
 | Evidence lifecycle controls | DONE | Optional encryption plus API/CLI retention cleanup with audit trail. |
 | Safe evidence dashboard access | DONE | Command UI opens evidence artifacts through the authorized asset endpoint instead of exposing raw filesystem paths. |
 | Docker Compose development path | PARTIAL | `deploy/compose/compose.yaml` includes env-file and healthcheck; production gateway/TLS still pending. |
