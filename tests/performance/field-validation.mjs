@@ -106,7 +106,10 @@ function buildReport({ startedAt, finishedAt, pipeline, db, source, model, keyfr
       evidenceModes: evidenceChecks.evidenceModes,
       nonSvgEvidenceObserved: evidenceChecks.nonSvgEvidenceObserved,
       facePrivacyMetadataObserved: evidenceChecks.facePrivacyMetadataObserved,
-      plateRedactionMetadataObserved: evidenceChecks.plateRedactionMetadataObserved
+      facePrivacyPathConnected: evidenceChecks.facePrivacyPathConnected,
+      faceRedactionMetadataObserved: evidenceChecks.faceRedactionMetadataObserved,
+      plateRedactionMetadataObserved: evidenceChecks.plateRedactionMetadataObserved,
+      platePrivacyPathConnected: evidenceChecks.platePrivacyPathConnected
     },
     gates: {
       controlApiStarted: true,
@@ -117,6 +120,8 @@ function buildReport({ startedAt, finishedAt, pipeline, db, source, model, keyfr
       nonSvgEvidenceObserved: evidenceChecks.nonSvgEvidenceObserved,
       facePrivacyMetadataObserved: validationMode === "REAL_SOURCE_COMMAND" ? evidenceChecks.facePrivacyMetadataObserved : "not_applicable_for_simulated_fixture",
       plateRedactionMetadataObserved: validationMode === "REAL_SOURCE_COMMAND" ? evidenceChecks.plateRedactionMetadataObserved : "not_applicable_for_simulated_fixture",
+      facePrivacyPathConnected: validationMode === "REAL_SOURCE_COMMAND" ? evidenceChecks.facePrivacyPathConnected : "not_applicable_for_simulated_fixture",
+      platePrivacyPathConnected: validationMode === "REAL_SOURCE_COMMAND" ? evidenceChecks.platePrivacyPathConnected : "not_applicable_for_simulated_fixture",
       noAccuracyClaimWithoutLabels: true
     },
     evidenceChecks,
@@ -131,7 +136,7 @@ function buildReport({ startedAt, finishedAt, pipeline, db, source, model, keyfr
     pipeline,
     notes: [
       "Use --source <rtsp-url|camera-index|video-file> with installed Python runtime dependencies for real-source validation.",
-      "For real demos, confirm nonSvgEvidenceObserved, facePrivacyMetadataObserved and plateRedactionMetadataObserved before calling evidence/redaction field-connected.",
+      "For real demos, confirm nonSvgEvidenceObserved plus the privacy path connection fields; facePrivacyMetadataObserved and plateRedactionMetadataObserved require actual detections in the captured frames.",
       "Accuracy and false-alert metrics require a labelled dataset and should not be inferred from this fixture report."
     ]
   };
@@ -145,9 +150,21 @@ function buildEvidenceChecks(evidence) {
     evidenceModes,
     assetContentTypes,
     nonSvgEvidenceObserved: evidence.some((item) => item.metadata?.evidenceMode && item.metadata.evidenceMode !== "SVG_FIXTURE"),
+    facePrivacyPathConnected: evidence.some((item) => item.metadata?.privacy?.faceDetection?.enabled === true),
     facePrivacyMetadataObserved: evidence.some((item) => Number(item.metadata?.privacy?.faceDetection?.candidates || 0) > 0),
+    faceDetectorConnected: evidence.some((item) => item.metadata?.privacy?.faceDetection?.detectorConnected === true),
+    faceDetectorErrors: evidence.map((item) => item.metadata?.privacy?.faceDetection?.error).filter(Boolean),
+    faceDetectionCandidateCounts: evidence
+      .map((item) => item.metadata?.privacy?.faceDetection?.candidates)
+      .filter((value) => value !== undefined),
+    platePrivacyPathConnected: evidence.some((item) => item.metadata?.privacy?.plateDetection?.enabled === true),
     plateRedactionMetadataObserved: redactions.some((item) => item.targetType === "PLATE"),
     faceRedactionMetadataObserved: redactions.some((item) => item.targetType === "FACE"),
+    plateDetectorConnected: evidence.some((item) => item.metadata?.privacy?.plateDetection?.detectorConnected === true),
+    plateDetectorErrors: evidence.map((item) => item.metadata?.privacy?.plateDetection?.error).filter(Boolean),
+    plateDetectionCandidateCounts: evidence
+      .map((item) => item.metadata?.privacy?.plateDetection?.candidates)
+      .filter((value) => value !== undefined),
     redactionTargets: redactions.map((item) => ({
       targetType: item.targetType,
       action: item.action,

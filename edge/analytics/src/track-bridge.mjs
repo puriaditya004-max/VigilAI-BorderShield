@@ -11,7 +11,7 @@ import {
   detectSuddenSpeedChange
 } from "./suspicious-activity.mjs";
 import { detectFrameTamper, detectNightMovement } from "./night-watch.mjs";
-import { processVehicleAnprFrame } from "./anpr.mjs";
+import { detectPlateCandidates, processVehicleAnprFrame } from "./anpr.mjs";
 import { buildIntrusionIncident, crossedFence, FenceIncidentPolicy } from "./virtual-fence.mjs";
 import { detectFaceCandidatesFromImage } from "../../vision-runtime/src/privacy-redaction.mjs";
 import { registerCamera, sendEvidence, sendHealth, sendIncident } from "./control-client.mjs";
@@ -214,41 +214,72 @@ async function createEvidenceWithPrivacy({ incidentHint, trackEvent, zone }) {
   let evidence = createEvidenceForTrack({ incidentHint, trackEvent, zone });
   const config = zone.analytics?.privacy || {};
   const faceConfig = config.face || {};
-  const enabled = config.enabled === true || faceConfig.enabled === true;
+  const plateConfig = config.plate || {};
+  const enabled = config.enabled === true || faceConfig.enabled === true || plateConfig.enabled === true;
   if (!enabled || !trackEvent.frame?.uri?.startsWith("file://")) return evidence;
 
-  const faceResult = await detectFaceCandidatesFromImage({
-    imagePath: filePathFromUri(trackEvent.frame.uri),
-    cameraId: trackEvent.cameraId,
-    frameTime: trackEvent.captureTime,
-    frameSize: trackEvent.coordinateSpace?.canonical || config.frameSize || { width: 1280, height: 720 },
-    command: faceConfig.command || process.env.FACE_DETECT_COMMAND,
-    args: faceConfig.args
-  });
+  const imagePath = filePathFromUri(trackEvent.frame.uri);
+  const frameSize = trackEvent.coordinateSpace?.canonical || config.frameSize || { width: 1280, height: 720 };
+  const privacyMetadata = { ...(evidence.metadata?.privacy || {}) };
+  const redactions = [...(evidence.metadata?.redactions || [])];
 
-  evidence = attachRedactionMetadata(evidence, [
-    ...(evidence.metadata?.redactions || []),
-    ...(faceResult.redactionPlan?.targets || [])
-  ]);
+  if (config.enabled === true || faceConfig.enabled === true) {
+    const faceResult = await detectFaceCandidatesFromImage({
+      imagePath,
+      cameraId: trackEvent.cameraId,
+      frameTime: trackEvent.captureTime,
+      frameSize,
+      command: faceConfig.command || process.env.FACE_DETECT_COMMAND,
+      args: faceConfig.args
+    });
+
+    redactions.push(...(faceResult.redactionPlan?.targets || []));
+    privacyMetadata.faceDetection = {
+      enabled: true,
+      detectorConnected: !faceResult.reasonCodes?.includes("FACE_DETECTOR_UNAVAILABLE"),
+      candidates: faceResult.candidates.length,
+      identityRecognition: false,
+      reasonCodes: faceResult.reasonCodes || [],
+      error: faceResult.error || undefined
+    };
+  }
+
+  if (config.enabled === true || plateConfig.enabled === true) {
+    const plateResult = await detectPlateCandidates({
+      imagePath,
+      cameraId: trackEvent.cameraId,
+      trackId: trackEvent.trackId,
+      frameSize,
+      captureTime: trackEvent.captureTime,
+      command: plateConfig.command || process.env.ANPR_PLATE_DETECT_COMMAND,
+      args: plateConfig.args
+    });
+
+    redactions.push(...plateRedactionsFromDetections(plateResult.detections || [], plateConfig));
+    privacyMetadata.plateDetection = {
+      enabled: true,
+      detectorConnected: !plateResult.reasonCodes?.includes("PLATE_DETECTOR_UNAVAILABLE"),
+      candidates: (plateResult.detections || []).filter((detection) => detection.quality?.accepted).length,
+      reasonCodes: plateResult.reasonCodes || [],
+      error: plateResult.error || undefined
+    };
+  }
+
+  evidence = attachRedactionMetadata(evidence, dedupeRedactions(redactions));
   evidence.metadata = {
     ...(evidence.metadata || {}),
-    privacy: {
-      ...(evidence.metadata?.privacy || {}),
-      faceDetection: {
-        enabled: true,
-        candidates: faceResult.candidates.length,
-        identityRecognition: false,
-        reasonCodes: faceResult.reasonCodes || [],
-        error: faceResult.error || undefined
-      }
-    }
+    privacy: privacyMetadata
   };
   return evidence;
 }
 
 function plateRedactionsFromAnprResult(result, privacy = {}) {
+  return plateRedactionsFromDetections(result.detections || [], privacy, ["ANPR_PLATE_DETECTION_ACCEPTED"]);
+}
+
+function plateRedactionsFromDetections(detections, privacy = {}, extraReasonCodes = []) {
   const enabled = privacy.enabled !== false;
-  return (result.detections || [])
+  return detections
     .filter((detection) => detection.quality?.accepted)
     .map((detection) => ({
       targetType: "PLATE",
@@ -257,9 +288,22 @@ function plateRedactionsFromAnprResult(result, privacy = {}) {
       bbox: detection.bbox,
       confidence: detection.confidence,
       reasonCodes: enabled
-        ? ["PLATE_PRIVACY_REDACTION_ENABLED", "ANPR_PLATE_DETECTION_ACCEPTED"]
-        : ["PLATE_DETECTED_REDACTION_DISABLED", "ANPR_PLATE_DETECTION_ACCEPTED"]
+        ? ["PLATE_PRIVACY_REDACTION_ENABLED", ...extraReasonCodes]
+        : ["PLATE_DETECTED_REDACTION_DISABLED", ...extraReasonCodes]
     }));
+}
+
+function dedupeRedactions(redactions) {
+  const seen = new Set();
+  const unique = [];
+  for (const redaction of redactions) {
+    const box = redaction.bbox || {};
+    const key = `${redaction.targetType}:${redaction.action}:${box.x}:${box.y}:${box.width}:${box.height}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    unique.push(redaction);
+  }
+  return unique;
 }
 
 function analyticsDecisions({ trackEvent, zone, latestTracks }) {

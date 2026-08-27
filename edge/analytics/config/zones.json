@@ -14,7 +14,8 @@
       "ruleVersion": "default.zone.v1",
       "privacy": {
         "enabled": true,
-        "face": { "enabled": true }
+        "face": { "enabled": true },
+        "plate": { "enabled": true }
       }
     }
   }

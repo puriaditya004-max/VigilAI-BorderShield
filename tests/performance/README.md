@@ -22,16 +22,21 @@ npm run validation:field
 Run against a real source after installing the Python runtime dependencies:
 
 ```bash
+FACE_DETECT_COMMAND=python
+FACE_DETECT_ARGS="edge/vision-runtime/python/opencv_face_runtime.py --image {imagePath}"
+# Set ANPR_PLATE_DETECT_COMMAND / ANPR_PLATE_DETECT_ARGS to an approved plate detector before claiming plate metadata.
 npm run validation:field -- --source 0 --model yolov8n.pt --max-frames 200 --keyframe-dir reports/keyframes --report reports/field-validation.json
 ```
 
-Real-source validation passes `--keyframe_dir` to the Python YOLO runtime so emitted `TrackEvent.frame.uri` values can produce non-SVG keyframe evidence. Treat PNG/keyframe evidence, face privacy metadata and plate redaction metadata as field-connected only after a real-source validation report shows non-SVG evidence with the expected redaction metadata.
+Real-source validation passes `--keyframe_dir` to the Python YOLO runtime so emitted `TrackEvent.frame.uri` values can produce non-SVG keyframe evidence. Treat PNG/keyframe evidence as field-connected after a real-source validation report shows non-SVG evidence. Treat face and plate target metadata as field-connected only after the report shows the detector path connected and the captured frames contain actual detectable faces or plates.
 
 The report includes explicit evidence gates:
 
 - `nonSvgEvidenceObserved`
 - `facePrivacyMetadataObserved`
+- `facePrivacyPathConnected`
 - `plateRedactionMetadataObserved`
+- `platePrivacyPathConnected`
 - `evidenceChecks.evidenceModes`
 - `evidenceChecks.redactionTargets`
 
