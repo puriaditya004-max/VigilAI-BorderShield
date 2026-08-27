@@ -198,6 +198,7 @@ Verification completed on 2026-08-26:
 | Evidence lifecycle controls | DONE | Optional encryption plus API/CLI retention cleanup with audit trail. |
 | Docker Compose development path | PARTIAL | `deploy/compose/compose.yaml` includes env-file and healthcheck; production gateway/TLS still pending. |
 | Field validation harness | DONE | `npm run validation:field` produces auditable JSON report for fixture or real source. |
+| Production readiness check | DONE | `npm run validation:production` writes a JSON report for required config and optional real-runtime blockers such as Python, FFmpeg, model files and detector/OCR commands. |
 | Model/dataset promotion guardrails | DONE | Dataset and model registry templates prevent unsupported accuracy claims. |
 | Real-producer trajectory compatibility | DONE | Bridge accumulates incoming single-point trajectories so real YOLO runtime can trigger fence policy. |
 | Optional OCR/face runtime adapters | PARTIAL | PaddleOCR/OpenCV wrappers and Node command adapters exist; ANPR also has a plate-detector command seam. Dependencies and field data must be supplied externally. |
@@ -208,6 +209,8 @@ Verification completed on 2026-08-26:
 ```bash
 npm test
 npm run verify:stable
+npm run validation:field
+npm run validation:production
 ```
 
 ## Known Security and Privacy Limitations

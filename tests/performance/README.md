@@ -36,3 +36,13 @@ Report invariants:
 - explicit `not_measured_without_labelled_dataset` fields for accuracy and false-alert metrics
 
 Do not convert fixture output into accuracy claims. Precision, recall and false-alert rate must come from labelled footage.
+
+## Production Readiness Report
+
+Run prerequisite checks before a real-video demonstration:
+
+```bash
+npm run validation:production
+```
+
+The report checks required config files and optional real-runtime dependencies such as Python, FFmpeg, model files, ANPR detector/OCR commands and face detector commands. It does not measure AI accuracy.
