@@ -79,7 +79,7 @@ button {
 
 .metrics {
   display: grid;
-  grid-template-columns: repeat(5, minmax(0, 1fr));
+  grid-template-columns: repeat(6, minmax(0, 1fr));
   gap: 12px;
   margin-bottom: 14px;
 }
@@ -207,6 +207,17 @@ dd {
   margin-top: 12px;
   padding-top: 12px;
   border-top: 1px solid var(--line);
+}
+
+.sla {
+  margin-top: 12px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.sla.overdue {
+  color: var(--danger);
+  font-weight: 700;
 }
 
 .incident-actions button {

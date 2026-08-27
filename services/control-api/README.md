@@ -22,6 +22,7 @@ Endpoints:
 - `GET /api/zones`
 - `POST /api/incidents`
 - `GET /api/incidents`
+- `GET /api/incidents/sla`
 - `POST /api/evidence/manifests`
 - `GET /api/evidence/manifests`
 - `POST /api/evidence/retention/run`
@@ -38,5 +39,6 @@ Production invariants already enforced:
 - append-only audit records for camera and incident events
 - SSE realtime incident/lifecycle stream at `GET /api/events`
 - optional HIGH/CRITICAL alert webhook delivery with audit for delivered/failed notifications
+- configurable incident SLA summary for overdue/due-soon critical alert handling
 - operator RBAC foundation for acknowledgement, escalation and retention actions
 - request body limits, security headers and in-memory rate limiting

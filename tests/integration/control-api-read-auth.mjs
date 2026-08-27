@@ -17,7 +17,7 @@ try {
   seedDb();
   server = await startControlApi({ cwd: root, port, env: ctx.env });
 
-  for (const route of ["/api/incidents", "/api/evidence/manifests", "/api/audit", "/api/metrics"]) {
+  for (const route of ["/api/incidents", "/api/incidents/sla", "/api/evidence/manifests", "/api/audit", "/api/metrics"]) {
     const missing = await fetch(`${endpoint}${route}`);
     assert(missing.status === 401, `${route} should require operator identity`);
 

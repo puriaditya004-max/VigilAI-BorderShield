@@ -10,6 +10,7 @@ import { appendAudit, ensureStore, readDb, updateDb } from "./store.mjs";
 import { badRequest, forbidden, notFound, payloadTooLarge, readJsonBody, sendJson, unauthorized, withSecurityHeaders } from "./http.mjs";
 import { notifyIncidentEvent } from "./notifier.mjs";
 import { authenticateOperator, clientRateLimitKey, createRateLimiter, hashDeviceKey, issueDeviceKey, publicCamera, publicCameraWithIssuedKey, verifyDeviceKey } from "./security.mjs";
+import { buildSlaSummary } from "./sla.mjs";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const root = path.resolve(__dirname, "../../..");
@@ -89,6 +90,10 @@ const server = http.createServer(async (req, res) => {
 
     if (req.method === "GET" && url.pathname === "/api/incidents") {
       return sendOperatorReadJson(req, res, readDb().incidents.slice().reverse());
+    }
+
+    if (req.method === "GET" && url.pathname === "/api/incidents/sla") {
+      return sendOperatorReadJson(req, res, buildSlaSummary(readDb().incidents));
     }
 
     if (req.method === "POST" && url.pathname === "/api/evidence/manifests") {
@@ -482,7 +487,8 @@ function buildMetrics(db) {
     incidents: {
       total: db.incidents.length,
       open: db.incidents.filter((incident) => incident.status === "OPEN").length,
-      bySeverity: incidentsBySeverity
+      bySeverity: incidentsBySeverity,
+      sla: buildSlaSummary(db.incidents)
     },
     evidence: {
       verified: db.evidence.filter((item) => item.status === "VERIFIED").length,

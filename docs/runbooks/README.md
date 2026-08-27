@@ -109,3 +109,13 @@ ALERT_WEBHOOK_TIMEOUT_MS=5000
 ```
 
 Webhook failures do not block incident ingestion; the control API records `notification.delivered` or `notification.failed` audit events.
+
+## Incident SLA
+
+Configure severity deadlines in minutes:
+
+```bash
+INCIDENT_SLA_MINUTES=CRITICAL:5,HIGH:15,MEDIUM:60,LOW:240
+```
+
+Operators can inspect overdue and due-soon incidents through `GET /api/incidents/sla`; the dashboard also shows the current overdue SLA count.

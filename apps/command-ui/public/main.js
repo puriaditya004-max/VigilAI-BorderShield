@@ -13,6 +13,7 @@ const els = {
   highCount: document.querySelector("#highCount"),
   auditCount: document.querySelector("#auditCount"),
   evidenceCount: document.querySelector("#evidenceCount"),
+  slaOverdueCount: document.querySelector("#slaOverdueCount"),
   incidentList: document.querySelector("#incidentList"),
   cameraList: document.querySelector("#cameraList"),
   auditList: document.querySelector("#auditList"),
@@ -136,6 +137,7 @@ function renderMetrics(cameras, incidents, audit, evidence, metrics) {
   els.highCount.textContent = (metrics?.incidents?.bySeverity?.HIGH || 0) + (metrics?.incidents?.bySeverity?.CRITICAL || 0);
   els.auditCount.textContent = metrics?.audit?.total ?? audit.length;
   els.evidenceCount.textContent = metrics?.evidence?.verified ?? evidence.length;
+  els.slaOverdueCount.textContent = metrics?.incidents?.sla?.overdue ?? 0;
 }
 
 function renderIncidents(incidents) {
@@ -158,9 +160,23 @@ function renderIncidents(incidents) {
         <div><dt>Evidence SHA</dt><dd>${escapeHtml(incident.evidence.sha256.slice(0, 18))}...</dd></div>
         <div><dt>Captured</dt><dd>${formatTime(incident.captureTime)}</dd></div>
       </dl>
+      ${renderSlaBadge(incident)}
       ${renderIncidentActions(incident)}
     </article>
   `).join("");
+}
+
+function renderSlaBadge(incident) {
+  if (!incident.receivedAt || incident.status !== "OPEN") return "";
+  const minutes = slaMinutesForSeverity(incident.severity);
+  const dueAt = Date.parse(incident.receivedAt) + minutes * 60 * 1000;
+  if (!Number.isFinite(dueAt)) return "";
+  const overdue = dueAt < Date.now();
+  return `<div class="sla ${overdue ? "overdue" : ""}">${overdue ? "SLA overdue" : `SLA due ${formatTime(new Date(dueAt).toISOString())}`}</div>`;
+}
+
+function slaMinutesForSeverity(severity) {
+  return { CRITICAL: 5, HIGH: 15, MEDIUM: 60, LOW: 240 }[String(severity || "").toUpperCase()] || 60;
 }
 
 function renderIncidentActions(incident) {

@@ -131,7 +131,7 @@ Verification completed on 2026-08-26:
 | Lifecycle realtime events | DONE | Acknowledge/escalate actions publish SSE events consumed by the dashboard. |
 | Dashboard command actions | DONE | Incident cards show acknowledge/escalate buttons for open incidents. |
 | Alert webhook delivery | DONE | `ALERT_WEBHOOK_URL` sends HIGH/CRITICAL incident and commander-escalation notifications with bearer-token support and delivered/failed audit entries; covered by `tests/unit/notifier.test.mjs` and `tests/integration/notification-webhook.mjs`. |
-| Human-in-the-loop critical alert handling | PARTIAL | Critical incidents can be acknowledged/escalated by operators; formal SLA/escalation policy pending. |
+| Human-in-the-loop critical alert handling | DONE | Critical incidents can be acknowledged/escalated by operators; configurable SLA deadlines expose overdue/due-soon incidents through API, metrics and dashboard, covered by `tests/unit/sla.test.mjs` and `tests/integration/incident-sla.mjs`. |
 
 ## Phase 6 - Evidence Lifecycle and Deployment Readiness
 
@@ -199,6 +199,7 @@ Verification completed on 2026-08-26:
 | API security helpers | PARTIAL | `services/control-api/src/security.mjs` covers hashed device keys, in-memory rate limits and operator RBAC foundation. |
 | Incident acknowledgement workflow | DONE | API/UI support acknowledge and escalate actions with audit trail and SSE refresh. |
 | Alert notification workflow | DONE | Optional webhook notifier in `services/control-api/src/notifier.mjs` delivers incident/escalation alerts and records notification audit events. |
+| Incident SLA workflow | DONE | `services/control-api/src/sla.mjs` computes severity-based deadlines from `INCIDENT_SLA_MINUTES`; `GET /api/incidents/sla`, metrics and dashboard show overdue incidents. |
 | Evidence lifecycle controls | DONE | Optional encryption plus API/CLI retention cleanup with audit trail. |
 | Safe evidence dashboard access | DONE | Command UI opens evidence artifacts through the authorized asset endpoint instead of exposing raw filesystem paths. |
 | Docker Compose development path | PARTIAL | `deploy/compose/compose.yaml` includes env-file and healthcheck; production gateway/TLS still pending. |
