@@ -151,7 +151,7 @@ Verification completed on 2026-08-26:
 
 | Requirement | Status | Evidence |
 |---|---|---|
-| Repeatable field validation harness | DONE | `tests/performance/field-validation.mjs` runs the producer-to-bridge-to-API path and writes a JSON report. |
+| Repeatable field validation harness | DONE | `tests/performance/field-validation.mjs` runs the producer-to-bridge-to-API path and writes a JSON report with evidence gates for non-SVG evidence, face privacy metadata and plate redaction metadata. |
 | Real-source validation command | DONE | `npm run validation:field -- --source <camera|rtsp|video> --model <model> --keyframe-dir <dir>` is documented and passes `--keyframe_dir` into the Python runtime. |
 | Accuracy claim guardrails | DONE | Validation report keeps precision, recall and false-alert rate as `not_measured_without_labelled_dataset` until labelled data is supplied. |
 | Dataset manifest template | DONE | `ml/datasets/README.md` documents slices, privacy fields and label counts. |
@@ -200,7 +200,7 @@ Verification completed on 2026-08-26:
 | Evidence lifecycle controls | DONE | Optional encryption plus API/CLI retention cleanup with audit trail. |
 | Safe evidence dashboard access | DONE | Command UI opens evidence artifacts through the authorized asset endpoint instead of exposing raw filesystem paths. |
 | Docker Compose development path | PARTIAL | `deploy/compose/compose.yaml` includes env-file and healthcheck; production gateway/TLS still pending. |
-| Field validation harness | DONE | `npm run validation:field` produces auditable JSON report for fixture or real source. |
+| Field validation harness | DONE | `npm run validation:field` produces auditable JSON report for fixture or real source, including evidence-mode and redaction-metadata gates for field demo verification. |
 | Production readiness check | DONE | `npm run validation:production` writes a JSON report for required config and optional real-runtime blockers such as Python, FFmpeg, model files and detector/OCR commands. |
 | Model/dataset promotion guardrails | DONE | Dataset and model registry templates prevent unsupported accuracy claims. |
 | Real-producer trajectory compatibility | DONE | Bridge accumulates incoming single-point trajectories so real YOLO runtime can trigger fence policy. |

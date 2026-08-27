@@ -87,6 +87,7 @@ function buildReport({ startedAt, finishedAt, pipeline, db, source, model, keyfr
   const durationMs = finishedAt.getTime() - startedAt.getTime();
   const incidents = db.incidents || [];
   const evidence = db.evidence || [];
+  const evidenceChecks = buildEvidenceChecks(evidence);
 
   return {
     schemaVersion: "field-validation-report.v1",
@@ -101,7 +102,11 @@ function buildReport({ startedAt, finishedAt, pipeline, db, source, model, keyfr
       incidentsCreated: incidents.length,
       evidenceVerified: evidence.filter((item) => item.status === "VERIFIED").length,
       auditEvents: db.audits?.length || 0,
-      pipelineSucceeded: pipeline.producer.exitCode === 0 && pipeline.bridge.exitCode === 0
+      pipelineSucceeded: pipeline.producer.exitCode === 0 && pipeline.bridge.exitCode === 0,
+      evidenceModes: evidenceChecks.evidenceModes,
+      nonSvgEvidenceObserved: evidenceChecks.nonSvgEvidenceObserved,
+      facePrivacyMetadataObserved: evidenceChecks.facePrivacyMetadataObserved,
+      plateRedactionMetadataObserved: evidenceChecks.plateRedactionMetadataObserved
     },
     gates: {
       controlApiStarted: true,
@@ -109,8 +114,12 @@ function buildReport({ startedAt, finishedAt, pipeline, db, source, model, keyfr
       analyticsBridgeExitedCleanly: pipeline.bridge.exitCode === 0,
       incidentFlowObserved: incidents.length > 0,
       evidenceFlowObserved: evidence.length > 0,
+      nonSvgEvidenceObserved: evidenceChecks.nonSvgEvidenceObserved,
+      facePrivacyMetadataObserved: validationMode === "REAL_SOURCE_COMMAND" ? evidenceChecks.facePrivacyMetadataObserved : "not_applicable_for_simulated_fixture",
+      plateRedactionMetadataObserved: validationMode === "REAL_SOURCE_COMMAND" ? evidenceChecks.plateRedactionMetadataObserved : "not_applicable_for_simulated_fixture",
       noAccuracyClaimWithoutLabels: true
     },
+    evidenceChecks,
     measuredMetrics: {
       endToEndDurationMs: durationMs,
       incidentLatencyMs: "not_measured_without_real_capture_clock",
@@ -122,8 +131,30 @@ function buildReport({ startedAt, finishedAt, pipeline, db, source, model, keyfr
     pipeline,
     notes: [
       "Use --source <rtsp-url|camera-index|video-file> with installed Python runtime dependencies for real-source validation.",
+      "For real demos, confirm nonSvgEvidenceObserved, facePrivacyMetadataObserved and plateRedactionMetadataObserved before calling evidence/redaction field-connected.",
       "Accuracy and false-alert metrics require a labelled dataset and should not be inferred from this fixture report."
     ]
+  };
+}
+
+function buildEvidenceChecks(evidence) {
+  const evidenceModes = [...new Set(evidence.map((item) => item.metadata?.evidenceMode || "UNKNOWN"))];
+  const redactions = evidence.flatMap((item) => item.metadata?.redactions || []);
+  const assetContentTypes = [...new Set(evidence.flatMap((item) => (item.assets || []).map((asset) => asset.contentType || "unknown")))];
+  return {
+    evidenceModes,
+    assetContentTypes,
+    nonSvgEvidenceObserved: evidence.some((item) => item.metadata?.evidenceMode && item.metadata.evidenceMode !== "SVG_FIXTURE"),
+    facePrivacyMetadataObserved: evidence.some((item) => Number(item.metadata?.privacy?.faceDetection?.candidates || 0) > 0),
+    plateRedactionMetadataObserved: redactions.some((item) => item.targetType === "PLATE"),
+    faceRedactionMetadataObserved: redactions.some((item) => item.targetType === "FACE"),
+    redactionTargets: redactions.map((item) => ({
+      targetType: item.targetType,
+      action: item.action,
+      method: item.method,
+      confidence: item.confidence,
+      reasonCodes: item.reasonCodes || []
+    }))
   };
 }
 
