@@ -23,4 +23,16 @@ Camera source config example:
 }
 ```
 
+For production RTSP credentials, prefer a secret reference over embedding the URI:
+
+```json
+{
+  "cameraId": "cam-bop-01-east",
+  "sourceType": "RTSP",
+  "streamUriRef": "env:CAMERA_RTSP_URI"
+}
+```
+
+Supported references are `env:NAME` and `file:path/to/secret.txt`; both are resolved only at runtime.
+
 Do not log raw RTSP URLs; use `redactUri()` before printing or sending stream metadata.

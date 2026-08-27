@@ -1,13 +1,19 @@
+import fs from "node:fs";
+import path from "node:path";
+
 const SOURCE_TYPES = new Set(["USB", "VIDEO_FILE", "RTSP", "ONVIF"]);
 
 export function normalizeCameraSource(config) {
+  const streamUri = resolveStreamUri(config);
   const source = {
     cameraId: requiredString(config.cameraId, "cameraId"),
     name: requiredString(config.name, "name"),
     edgeNodeId: requiredString(config.edgeNodeId, "edgeNodeId"),
     location: config.location || "unknown",
-    sourceType: config.sourceType || inferSourceType(config.streamUri ?? config.source),
-    streamUri: requiredString(config.streamUri ?? config.source, "streamUri"),
+    sourceType: config.sourceType || inferSourceType(streamUri),
+    streamUri: requiredString(streamUri, "streamUri"),
+    streamUriRef: config.streamUriRef || null,
+    streamUriRedacted: redactUri(streamUri),
     frameSampling: {
       targetFps: Number(config.frameSampling?.targetFps ?? 8),
       maxDecodeFps: Number(config.frameSampling?.maxDecodeFps ?? 25)
@@ -34,6 +40,29 @@ export function normalizeCameraSource(config) {
   }
 
   return source;
+}
+
+export function resolveStreamUri(config, { env = process.env, cwd = process.cwd() } = {}) {
+  if (config.streamUriRef) return loadSecretRef(config.streamUriRef, { env, cwd });
+  return config.streamUri ?? config.source;
+}
+
+export function loadSecretRef(ref, { env = process.env, cwd = process.cwd() } = {}) {
+  const value = String(ref || "").trim();
+  if (value.startsWith("env:")) {
+    const key = value.slice("env:".length);
+    const secret = env[key];
+    if (!secret) throw new Error(`camera secret env var is not set: ${key}`);
+    return secret.trim();
+  }
+
+  if (value.startsWith("file:")) {
+    const secretPath = path.resolve(cwd, value.slice("file:".length));
+    if (!fs.existsSync(secretPath)) throw new Error(`camera secret file is missing: ${value}`);
+    return fs.readFileSync(secretPath, "utf8").trim();
+  }
+
+  throw new Error("streamUriRef must use env:<NAME> or file:<path>");
 }
 
 export function inferSourceType(value) {

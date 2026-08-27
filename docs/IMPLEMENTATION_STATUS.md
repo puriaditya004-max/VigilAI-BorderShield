@@ -59,7 +59,7 @@ Verification completed on 2026-08-26:
 | Reconnection with exponential backoff | DONE | `reconnectDelay()` in `edge/edge-agent/src/camera-source.mjs`, covered by `tests/unit/camera-source.test.mjs`. |
 | Stream-health monitoring | DONE | `StreamHealthTracker` emits `CameraHealth` payloads with dropped frames and latency. |
 | FPS, resolution, latency and dropped-frame metrics | PARTIAL | Dropped-frame and latency metrics implemented; Python runtime requests/logs capture resolution, emits frame brightness/contrast/sharpness/blocked-ratio metadata per detection, and the orchestrator reports runtime duration/incident summary. Measured FPS from the real decoder loop is still pending. |
-| Secure camera credential handling | PARTIAL | `redactUri()` prevents RTSP credentials in health payloads/loggable values; secret reference loading pending. |
+| Secure camera credential handling | DONE | `redactUri()` prevents RTSP credentials in health payloads/loggable values, and camera configs can use `streamUriRef` with `env:` or `file:` secret references; covered by `tests/unit/camera-source.test.mjs`. |
 | Configurable frame sampling | DONE | `frameSampling.targetFps` and `maxDecodeFps` validated in camera source config. |
 | CPU and NVIDIA GPU execution modes | PARTIAL | Runtime config supports `CPU`/future modes; GPU execution not tested. |
 
@@ -221,6 +221,7 @@ npm run validation:production
 - New and rotated device keys are hashed in local JSON; existing legacy plaintext keys are accepted only for backward compatibility until rotation.
 - Operator RBAC protects incident actions plus sensitive incident/evidence/audit/metrics reads, but there is no persistent login/session UI, MFA, or TLS/mTLS enforcement yet.
 - Rate limiting is in-memory and single-process only; production should use a shared limiter behind the deployment gateway.
+- Camera source configs support env/file secret references for RTSP URIs; avoid committing raw camera credentials.
 - Face detection has a privacy-only candidate/redaction foundation and optional detector adapter; no identity recognition, matching or biometric embeddings are implemented.
 - ANPR has detector/crop/voting foundations and optional OCR adapter paths; no measured OCR or plate-detection accuracy is claimed.
 - Privacy redaction currently emits blur instructions; production video/image blur rendering still needs frame pipeline integration.
