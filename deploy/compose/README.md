@@ -11,11 +11,11 @@ docker compose -f deploy/compose/compose.yaml up
 
 The service stores local development state under `services/control-api/data/`, which is ignored by git.
 
-The Compose stack also includes an optional PostgreSQL service for storage-migration testing:
+The Compose stack also includes an optional PostgreSQL service for storage-migration testing. It maps to host port `5433` by default so it can run beside other SIH projects using `5432`.
 
 ```bash
 docker compose -f deploy/compose/compose.yaml up -d postgres
-$env:POSTGRES_URL="postgres://vigilai:vigilai@localhost:5432/vigilai"
+$env:POSTGRES_URL="postgres://vigilai:vigilai@localhost:5433/vigilai"
 npm run db:migrate
 ```
 

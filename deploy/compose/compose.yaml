@@ -2,7 +2,7 @@ services:
   postgres:
     image: postgres:16-alpine
     ports:
-      - "5432:5432"
+      - "${POSTGRES_PORT:-5433}:5432"
     environment:
       POSTGRES_DB: vigilai
       POSTGRES_USER: vigilai
@@ -15,35 +15,44 @@ services:
       timeout: 3s
       retries: 5
   control-api:
-    image: node:20-alpine
-    working_dir: /app
-    command: ["node", "services/control-api/src/server.mjs"]
+    build:
+      context: ../..
+      dockerfile: services/control-api/Dockerfile
     ports:
       - "7080:7080"
     volumes:
-      - ../../:/app
+      - control-data:/app/services/control-api/data
+      - evidence-data:/app/edge/edge-agent/data/evidence
     env_file:
       - ../../.env
     environment:
       PORT: "7080"
+      CONTROL_API_DATA_DIR: "services/control-api/data"
+      EVIDENCE_DIR: "edge/edge-agent/data/evidence"
     healthcheck:
       test: ["CMD", "wget", "-qO-", "http://localhost:7080/health"]
       interval: 15s
       timeout: 3s
       retries: 5
   edge-bridge:
-    image: node:20-alpine
-    working_dir: /app
-    command: ["sh", "-c", "node edge/vision-runtime/src/simulate-tracks.mjs | node edge/analytics/src/track-bridge.mjs"]
+    build:
+      context: ../..
+      dockerfile: edge/analytics/Dockerfile
     depends_on:
       control-api:
         condition: service_healthy
     volumes:
-      - ../../:/app
+      - edge-outbox:/app/edge/edge-agent/data/outbox
+      - evidence-data:/app/edge/edge-agent/data/evidence
     env_file:
       - ../../.env
     environment:
       CONTROL_API_URL: "http://control-api:7080"
+      EDGE_OUTBOX_DIR: "edge/edge-agent/data/outbox"
+      EVIDENCE_DIR: "edge/edge-agent/data/evidence"
 
 volumes:
   postgres-data:
+  control-data:
+  edge-outbox:
+  evidence-data:

@@ -12,7 +12,7 @@ Use PostgreSQL only when a local or deployed Postgres instance is ready and migr
 
 ```bash
 docker compose -f deploy/compose/compose.yaml up -d postgres
-$env:POSTGRES_URL="postgres://vigilai:vigilai@localhost:5432/vigilai"
+$env:POSTGRES_URL="postgres://vigilai:vigilai@localhost:5433/vigilai"
 npm run db:migrate
 ```
 
@@ -22,7 +22,7 @@ The same URL can also be supplied as `DATABASE_URL`.
 
 ```bash
 $env:STORE_DRIVER="postgres"
-$env:POSTGRES_URL="postgres://vigilai:vigilai@localhost:5432/vigilai"
+$env:POSTGRES_URL="postgres://vigilai:vigilai@localhost:5433/vigilai"
 npm run control-api:start
 ```
 
@@ -51,7 +51,7 @@ npm test
 PostgreSQL smoke test:
 
 ```bash
-$env:POSTGRES_URL="postgres://vigilai:vigilai@localhost:5432/vigilai"
+$env:POSTGRES_URL="postgres://vigilai:vigilai@localhost:5433/vigilai"
 npm run postgres:test
 ```
 

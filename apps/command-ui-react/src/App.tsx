@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { evidenceAssetUrl, loginOperator, updateIncidentStatus } from "./api";
 import { useDashboardData } from "./hooks/useDashboardData";
 import type { EvidenceManifest, Incident, OperatorRole, OperatorSession } from "./types";
@@ -17,7 +17,7 @@ export function App() {
   const [actionNote, setActionNote] = useState("");
   const [actionError, setActionError] = useState<string | null>(null);
   const [pendingAction, setPendingAction] = useState<"acknowledge" | "escalate" | null>(null);
-  const operator = session.token ? session : { ...session, role };
+  const operator = useMemo(() => session.token ? session : { ...session, role }, [role, session]);
   const { data, connectionState, error, refresh, setData } = useDashboardData(operator);
   const loading = connectionState === "loading";
   const selectedIncident = data.incidents.find((incident) => incident.incidentId === selectedIncidentId) || data.incidents[0] || null;

@@ -1,7 +1,7 @@
 import pg from "pg";
 
 const { Client } = pg;
-const connectionString = process.env.POSTGRES_URL || process.env.DATABASE_URL || "postgres://vigilai:vigilai@localhost:5432/vigilai";
+const connectionString = process.env.POSTGRES_URL || process.env.DATABASE_URL || "postgres://vigilai:vigilai@localhost:5433/vigilai";
 
 const EMPTY_DB = {
   cameras: [],

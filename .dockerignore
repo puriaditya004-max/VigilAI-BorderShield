@@ -1,0 +1,10 @@
+node_modules
+npm-debug.log
+.git
+.env
+services/control-api/data
+edge/edge-agent/data
+edge/edge-agent/outbox
+reports
+keyframes-test
+apps/command-ui-react/dist

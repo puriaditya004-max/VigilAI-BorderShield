@@ -146,7 +146,7 @@ Verification completed on 2026-08-26:
 | Retention CLI | DONE | `npm run evidence:retention` runs cleanup for scheduled jobs. |
 | Authorized evidence asset serving | DONE | `GET /api/evidence/assets/:manifestId/:assetIndex` requires operator read permission, only serves verified manifests under `EVIDENCE_DIR`, rechecks asset hashes, and is covered by `tests/integration/evidence-asset-serving.mjs`; manifest list responses expose safe asset URLs instead of raw `file://` paths. |
 | Production env template | DONE | `.env.example` documents runtime, security, rate limit and evidence lifecycle settings without secrets. |
-| Compose healthcheck | DONE | `deploy/compose/compose.yaml` waits for `control-api` health before starting `edge-bridge`. |
+| Compose healthcheck | DONE | `deploy/compose/compose.yaml` builds production-style Control API and edge-bridge images, persists control/evidence/outbox data in named volumes, and waits for `control-api` health before starting `edge-bridge`. |
 | Deployment runbook | DONE | `docs/runbooks/README.md` documents smoke tests, operator workflow and retention procedure. |
 | Production TLS/mTLS | BLOCKED | Requires deployment gateway/certificates. |
 
@@ -204,7 +204,8 @@ Verification completed on 2026-08-26:
 | Incident SLA workflow | DONE | `services/control-api/src/sla.mjs` computes severity-based deadlines from `INCIDENT_SLA_MINUTES`; `GET /api/incidents/sla`, metrics and dashboard show overdue incidents. |
 | Evidence lifecycle controls | DONE | Optional encryption plus API/CLI retention cleanup with audit trail. |
 | Safe evidence dashboard access | DONE | Static Command UI opens evidence artifacts through the authorized asset endpoint and React Command UI renders authorized JPEG/MP4 assets through the same endpoint instead of exposing raw filesystem paths. |
-| Docker Compose development path | PARTIAL | `deploy/compose/compose.yaml` includes env-file and healthcheck; production gateway/TLS still pending. |
+| Docker Compose development path | DONE | `deploy/compose/compose.yaml` includes Postgres, built Control API and edge-bridge containers, env-file wiring, named volumes and healthchecks for local pilot/demo execution. |
+| Kubernetes pilot manifests | PARTIAL | `deploy/kubernetes/` contains Postgres, Control API and edge-bridge Deployment/Service/PVC/Secret/ConfigMap manifests. Production image registry, TLS/mTLS gateway and cluster secret management remain deployment-site responsibilities. |
 | Field validation harness | DONE | `npm run validation:field` produces auditable JSON report for fixture or real source, including evidence-mode, redaction-metadata gates and optional suspicious/night/MP4 observation flags for field demo verification. |
 | Production readiness check | DONE | `npm run validation:production` writes a JSON report for required config and optional real-runtime blockers such as Python, FFmpeg, model files and detector/OCR commands. |
 | Model/dataset promotion guardrails | DONE | Dataset and model registry templates prevent unsupported accuracy claims. |

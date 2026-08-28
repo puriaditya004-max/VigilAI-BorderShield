@@ -1,0 +1,54 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: vigilai-edge-bridge-config
+data:
+  CONTROL_API_URL: "http://vigilai-control-api:7080"
+  EDGE_OUTBOX_DIR: "edge/edge-agent/data/outbox"
+  EVIDENCE_DIR: "edge/edge-agent/data/evidence"
+  EDGE_REGISTER_BACKOFF_BASE_MS: "2000"
+  EDGE_REGISTER_BACKOFF_MAX_MS: "60000"
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: vigilai-edge-outbox
+spec:
+  accessModes: ["ReadWriteOnce"]
+  resources:
+    requests:
+      storage: 2Gi
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: vigilai-edge-bridge
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: vigilai-edge-bridge
+  template:
+    metadata:
+      labels:
+        app: vigilai-edge-bridge
+    spec:
+      containers:
+        - name: edge-bridge
+          image: vigilai/edge-bridge:latest
+          imagePullPolicy: IfNotPresent
+          envFrom:
+            - configMapRef:
+                name: vigilai-edge-bridge-config
+          volumeMounts:
+            - name: outbox
+              mountPath: /app/edge/edge-agent/data/outbox
+            - name: evidence
+              mountPath: /app/edge/edge-agent/data/evidence
+      volumes:
+        - name: outbox
+          persistentVolumeClaim:
+            claimName: vigilai-edge-outbox
+        - name: evidence
+          persistentVolumeClaim:
+            claimName: vigilai-evidence

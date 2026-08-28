@@ -8,7 +8,7 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const migrationsDir = path.resolve(__dirname, "../migrations");
 
 export async function runMigrations({
-  connectionString = process.env.POSTGRES_URL || process.env.DATABASE_URL || "postgres://vigilai:vigilai@localhost:5432/vigilai",
+  connectionString = process.env.POSTGRES_URL || process.env.DATABASE_URL || "postgres://vigilai:vigilai@localhost:5433/vigilai",
   directory = migrationsDir
 } = {}) {
   const client = new Client({ connectionString });
