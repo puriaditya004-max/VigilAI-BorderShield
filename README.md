@@ -12,7 +12,8 @@ dedicated FRS/ANPR/smart-camera hardware.
 
 ```
 VigilAI-BorderShield/
-├── apps/command-ui/         React + TS operator HMI (map, triage, replay, audit)
+├── apps/command-ui/         Static operator HMI fallback
+├── apps/command-ui-react/   React + TS operator command center
 ├── services/
 │   ├── control-api/         Cameras, zones, incidents, users, audit (NestJS)
 │   └── evidence-service/    Clips, keyframes, hashes, retention (MinIO)
@@ -88,6 +89,22 @@ npm run --silent vision:simulate | npm run --silent edge:bridge
 ```
 
 Then open `http://localhost:7080/` to view cameras, incidents, evidence and audit events.
+
+Run the React command center in Vite dev mode:
+
+```bash
+npm run command-ui:start
+npm run command-ui-react:dev
+```
+
+Build the React command center and serve it from the Control API at `/app` while keeping the static dashboard at `/`:
+
+```bash
+npm run command-ui-react:build
+npm run command-ui:start
+```
+
+Open `http://localhost:7080/app`.
 
 Run the real OpenCV/YOLO producer through the same bridge:
 

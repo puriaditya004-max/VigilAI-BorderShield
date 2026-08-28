@@ -41,7 +41,7 @@ Verification completed on 2026-08-26:
 | Suspicious-activity analytics | PARTIAL | Rule foundations for loitering, repeated boundary approach, crowd formation and sudden speed change are connected to `runTrackBridge()` and enabled in the default zone config with conservative demo thresholds; covered by `tests/integration/analytics-to-control-api.mjs`. Field tuning pending. |
 | Night-movement analytics | PARTIAL | Python runtime can emit frame stats and bridge feeds configured low-light movement/tamper checks into incidents; default zone enables night and tamper rules, covered by `tests/integration/analytics-to-control-api.mjs`. Camera-specific tuning pending. |
 | Real-time alerting and event logging | PARTIAL | Incident/audit flow, operator-authorized SSE stream, operator lifecycle updates and optional HIGH/CRITICAL webhook notifications are implemented; full multi-channel notification escalation pending. |
-| Command-and-control dashboard | PARTIAL | Static dashboard consumes live SSE incident updates, supports acknowledge/escalate actions and keeps polling fallback. Local OpenCV preview is available for manual camera-side demos; React/TypeScript HMI not implemented. |
+| Command-and-control dashboard | PARTIAL | Static dashboard remains available at `/` as the fallback. React/TypeScript command center in `apps/command-ui-react` provides overview, camera status, live incident feed, incident detail with authorized JPEG/MP4 evidence rendering, acknowledge/escalate actions, audit log, role selector and tested loading/empty/error states; built assets are served at `/app`. Local OpenCV preview remains available for manual camera-side demos. |
 | Existing CCTV/RTSP compatibility | PARTIAL | Python runtime accepts OpenCV sources including RTSP and maps source-frame detections into the canonical 1280x720 zone coordinate space; ONVIF discovery not implemented. |
 | Offline edge operation and synchronization | PARTIAL | Durable JSON outbox and replay in `edge/edge-agent/src/outbox.mjs`; bridge startup no longer crashes if camera registration is unavailable and queues incidents until the command link recovers, covered by `tests/integration/offline-startup-queue.mjs`. Evidence encryption is optional, bounded rolling frame buffer foundation exists, encrypted rolling video buffer pending. |
 | Accuracy/performance evaluation | PARTIAL | `npm run validation:field` generates fixture/real-source validation reports with explicit not-measured accuracy fields; labelled dataset and hardware still required for claims. |
@@ -109,7 +109,7 @@ Verification completed on 2026-08-26:
 | Requirement | Status | Evidence |
 |---|---|---|
 | Realtime incident delivery | DONE | `GET /api/events` emits operator-authorized Server-Sent Events; `tests/integration/realtime-events.mjs` verifies incident delivery. |
-| Dashboard live updates | DONE | `apps/command-ui/public/main.js` consumes the SSE stream through authenticated fetch streaming with polling fallback. |
+| Dashboard live updates | DONE | `apps/command-ui/public/main.js` and `apps/command-ui-react/src/hooks/useDashboardData.ts` consume the SSE stream through authenticated fetch streaming with polling fallback. |
 | Security headers | DONE | `withSecurityHeaders()` applies `nosniff`, frame denial, no-referrer and resource policy to JSON/static/SSE responses. |
 | Request body size limits | DONE | `readJsonBody()` enforces configurable `MAX_JSON_BODY_BYTES` and returns 413 on oversized payloads. |
 | Invalid JSON handling | DONE | Invalid request JSON returns 400; covered by `tests/integration/control-api-hardening.mjs`. |
@@ -202,7 +202,7 @@ Verification completed on 2026-08-26:
 | Alert notification workflow | DONE | Optional webhook notifier in `services/control-api/src/notifier.mjs` delivers incident/escalation alerts and records notification audit events. |
 | Incident SLA workflow | DONE | `services/control-api/src/sla.mjs` computes severity-based deadlines from `INCIDENT_SLA_MINUTES`; `GET /api/incidents/sla`, metrics and dashboard show overdue incidents. |
 | Evidence lifecycle controls | DONE | Optional encryption plus API/CLI retention cleanup with audit trail. |
-| Safe evidence dashboard access | DONE | Command UI opens evidence artifacts through the authorized asset endpoint instead of exposing raw filesystem paths. |
+| Safe evidence dashboard access | DONE | Static Command UI opens evidence artifacts through the authorized asset endpoint and React Command UI renders authorized JPEG/MP4 assets through the same endpoint instead of exposing raw filesystem paths. |
 | Docker Compose development path | PARTIAL | `deploy/compose/compose.yaml` includes env-file and healthcheck; production gateway/TLS still pending. |
 | Field validation harness | DONE | `npm run validation:field` produces auditable JSON report for fixture or real source, including evidence-mode, redaction-metadata gates and optional suspicious/night/MP4 observation flags for field demo verification. |
 | Production readiness check | DONE | `npm run validation:production` writes a JSON report for required config and optional real-runtime blockers such as Python, FFmpeg, model files and detector/OCR commands. |

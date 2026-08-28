@@ -16,6 +16,7 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const root = path.resolve(__dirname, "../../..");
 const PORT = Number(process.env.PORT || 7080);
 const uiDir = path.join(root, "apps/command-ui/public");
+const reactUiDir = path.join(root, "apps/command-ui-react/dist");
 const rateLimiter = createRateLimiter({
   windowMs: Number(process.env.RATE_LIMIT_WINDOW_MS || 60000),
   maxRequests: Number(process.env.RATE_LIMIT_MAX || 240)
@@ -43,6 +44,10 @@ const server = http.createServer(async (req, res) => {
 
     if (req.method === "GET" && (url.pathname === "/" || url.pathname.startsWith("/assets/") || ["/main.js", "/styles.css"].includes(url.pathname))) {
       return serveStaticUi(res, url.pathname);
+    }
+
+    if (req.method === "GET" && (url.pathname === "/app" || url.pathname === "/app/" || url.pathname.startsWith("/app/assets/"))) {
+      return serveReactUi(res, url.pathname);
     }
 
     if (req.method === "GET" && url.pathname === "/health") {
@@ -445,6 +450,30 @@ function serveStaticUi(res, pathname) {
     : ext === ".js" ? "text/javascript; charset=utf-8"
       : ext === ".css" ? "text/css; charset=utf-8"
         : "application/octet-stream";
+
+  res.writeHead(200, withSecurityHeaders({ "content-type": contentType }));
+  res.end(fs.readFileSync(filePath));
+}
+
+function serveReactUi(res, pathname) {
+  if (!fs.existsSync(reactUiDir)) {
+    return sendJson(res, 503, {
+      error: "react_ui_not_built",
+      message: "run npm run command-ui-react:build before opening /app"
+    });
+  }
+
+  const relative = pathname === "/app" || pathname === "/app/" ? "index.html" : pathname.replace(/^\/app\//, "");
+  const filePath = path.resolve(reactUiDir, relative);
+  const relativeToUi = path.relative(reactUiDir, filePath);
+  if (relativeToUi.startsWith("..") || path.isAbsolute(relativeToUi) || !fs.existsSync(filePath)) return notFound(res);
+
+  const ext = path.extname(filePath).toLowerCase();
+  const contentType = ext === ".html" ? "text/html; charset=utf-8"
+    : ext === ".js" ? "text/javascript; charset=utf-8"
+      : ext === ".css" ? "text/css; charset=utf-8"
+        : ext === ".svg" ? "image/svg+xml"
+          : "application/octet-stream";
 
   res.writeHead(200, withSecurityHeaders({ "content-type": contentType }));
   res.end(fs.readFileSync(filePath));
