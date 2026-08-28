@@ -86,14 +86,12 @@ async function connect() {
 }
 
 async function readDbWithClient(client) {
-  const [cameras, zones, incidents, manifests, assets, audits] = await Promise.all([
-    client.query("SELECT record FROM cameras ORDER BY registered_at NULLS LAST, camera_id"),
-    client.query("SELECT record FROM zones ORDER BY zone_id"),
-    client.query("SELECT record FROM incidents ORDER BY capture_time NULLS LAST, received_at NULLS LAST, event_id"),
-    client.query("SELECT record FROM evidence_manifests ORDER BY created_at NULLS LAST, manifest_id"),
-    client.query("SELECT manifest_id, asset_index, record FROM evidence_assets ORDER BY manifest_id, asset_index"),
-    client.query("SELECT record FROM audit_events ORDER BY created_at NULLS LAST, audit_id")
-  ]);
+  const cameras = await client.query("SELECT record FROM cameras ORDER BY registered_at NULLS LAST, camera_id");
+  const zones = await client.query("SELECT record FROM zones ORDER BY zone_id");
+  const incidents = await client.query("SELECT record FROM incidents ORDER BY capture_time NULLS LAST, received_at NULLS LAST, event_id");
+  const manifests = await client.query("SELECT record FROM evidence_manifests ORDER BY created_at NULLS LAST, manifest_id");
+  const assets = await client.query("SELECT manifest_id, asset_index, record FROM evidence_assets ORDER BY manifest_id, asset_index");
+  const audits = await client.query("SELECT record FROM audit_events ORDER BY created_at NULLS LAST, audit_id");
 
   const assetsByManifest = new Map();
   for (const row of assets.rows) {
