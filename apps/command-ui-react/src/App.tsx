@@ -135,6 +135,20 @@ export function App() {
               <EmptyState message="Select an incident to inspect evidence and workflow actions." />
             )}
           </Panel>
+
+          <Panel title="Audit Log">
+            {loading ? <EmptyState message="Loading audit trail..." /> : null}
+            {!loading && data.audit.length === 0 ? <EmptyState message="No audit events recorded." /> : null}
+            <div className="audit-list">
+              {data.audit.slice(0, 12).map((event) => (
+                <article className="audit-row" key={event.auditId}>
+                  <strong>{event.action}</strong>
+                  <span>{event.resource}</span>
+                  <time>{formatTime(event.createdAt)}</time>
+                </article>
+              ))}
+            </div>
+          </Panel>
         </div>
       </section>
     </main>

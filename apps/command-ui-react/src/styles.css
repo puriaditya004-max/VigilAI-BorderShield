@@ -208,7 +208,8 @@ h2 {
 .overview-grid,
 .list,
 .side-stack,
-.incident-list {
+.incident-list,
+.audit-list {
   display: grid;
   gap: 10px;
 }
@@ -389,6 +390,27 @@ h2 {
 .error-text {
   color: var(--danger);
   margin-top: 8px;
+}
+
+.audit-row {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel-raised);
+  padding: 11px;
+}
+
+.audit-row strong,
+.audit-row span,
+.audit-row time {
+  display: block;
+}
+
+.audit-row span,
+.audit-row time {
+  margin-top: 4px;
+  color: var(--muted);
+  font-size: 12px;
+  overflow-wrap: anywhere;
 }
 
 @media (max-width: 940px) {
