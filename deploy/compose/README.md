@@ -11,6 +11,14 @@ docker compose -f deploy/compose/compose.yaml up
 
 The service stores local development state under `services/control-api/data/`, which is ignored by git.
 
+The Compose stack also includes an optional PostgreSQL service for storage-migration testing:
+
+```bash
+docker compose -f deploy/compose/compose.yaml up -d postgres
+$env:POSTGRES_URL="postgres://vigilai:vigilai@localhost:5432/vigilai"
+npm run db:migrate
+```
+
 Production notes:
 
 - set `DEVICE_KEY_SALT`, `OPERATOR_TOKEN` and `EVIDENCE_ENCRYPTION_KEY` before running outside local demo mode

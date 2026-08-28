@@ -1,4 +1,19 @@
 services:
+  postgres:
+    image: postgres:16-alpine
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_DB: vigilai
+      POSTGRES_USER: vigilai
+      POSTGRES_PASSWORD: vigilai
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U vigilai -d vigilai"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
   control-api:
     image: node:20-alpine
     working_dir: /app
@@ -29,3 +44,6 @@ services:
       - ../../.env
     environment:
       CONTROL_API_URL: "http://control-api:7080"
+
+volumes:
+  postgres-data:

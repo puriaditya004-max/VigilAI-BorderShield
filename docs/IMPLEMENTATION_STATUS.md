@@ -115,6 +115,7 @@ Verification completed on 2026-08-26:
 | Invalid JSON handling | DONE | Invalid request JSON returns 400; covered by `tests/integration/control-api-hardening.mjs`. |
 | Sensitive read API authorization | DONE | Incident, evidence-manifest, audit, metrics and realtime event read endpoints require operator `incident:read` permission; dashboard fetches include operator headers. |
 | API rate limiting | PARTIAL | In-memory per-client limiter in `services/control-api/src/security.mjs`; production distributed store pending. |
+| PostgreSQL storage migration | PARTIAL | Stage 1 schema and dependency-light SQL migration runner exist under `services/control-api/migrations/` and `services/control-api/src/run-migrations.mjs`; `STORE_DRIVER` still defaults to JSON and application wiring is pending. JSON-mode `npm test` passes. Local Postgres verification is blocked in this environment because Docker/PostgreSQL is not installed. |
 | Hashed device-key storage | DONE | New/rotated camera keys are stored as SHA-256 hashes; plaintext key is returned only on issuance. |
 | Public camera response redaction | DONE | `GET /api/cameras` removes `deviceKey` and `deviceKeyHash` fields. |
 | Operator auth and RBAC | PARTIAL | Header/token-based operator foundation with VIEWER/OPERATOR/COMMANDER permissions; persistent login/session UI pending. |
