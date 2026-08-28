@@ -54,7 +54,11 @@ CREATE TABLE IF NOT EXISTS incidents (
   escalation_note text,
   evidence jsonb NOT NULL DEFAULT '{}'::jsonb,
   reason_codes jsonb NOT NULL DEFAULT '[]'::jsonb,
-  record jsonb NOT NULL DEFAULT '{}'::jsonb
+  record jsonb NOT NULL DEFAULT '{}'::jsonb,
+  CONSTRAINT incidents_camera_id_fkey
+    FOREIGN KEY (camera_id) REFERENCES cameras(camera_id)
+    ON DELETE RESTRICT
+    DEFERRABLE INITIALLY DEFERRED
 );
 
 CREATE TABLE IF NOT EXISTS evidence_manifests (
@@ -68,7 +72,11 @@ CREATE TABLE IF NOT EXISTS evidence_manifests (
   keyframe_uri text,
   clip_uri text,
   metadata jsonb NOT NULL DEFAULT '{}'::jsonb,
-  record jsonb NOT NULL DEFAULT '{}'::jsonb
+  record jsonb NOT NULL DEFAULT '{}'::jsonb,
+  CONSTRAINT evidence_manifests_incident_id_fkey
+    FOREIGN KEY (incident_id) REFERENCES incidents(incident_id)
+    ON DELETE CASCADE
+    DEFERRABLE INITIALLY DEFERRED
 );
 
 CREATE TABLE IF NOT EXISTS evidence_assets (

@@ -73,6 +73,16 @@ Run the control API:
 npm run control-api:start
 ```
 
+The control API uses the JSON-file store by default for local dev and SIH demo safety. PostgreSQL storage is available as an opt-in path after migrations:
+
+```bash
+npm run db:migrate
+$env:STORE_DRIVER="postgres"
+npm run control-api:start
+```
+
+See `docs/runbooks/postgres-migration.md` for the migration, JSON import, and Postgres smoke-test commands.
+
 Run the virtual-fence edge simulator in another terminal:
 
 ```bash

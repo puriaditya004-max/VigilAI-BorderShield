@@ -8,6 +8,7 @@
     "contracts:test": "node tests/contract/validate-samples.mjs",
     "control-api:start": "node services/control-api/src/server.mjs",
     "db:migrate": "node services/control-api/src/run-migrations.mjs",
+    "db:import-json": "node services/control-api/src/import-json-to-postgres.mjs",
     "vision:simulate": "node edge/vision-runtime/src/simulate-tracks.mjs",
     "edge:simulate": "node edge/analytics/src/simulate-fence.mjs",
     "edge:bridge": "node edge/analytics/src/track-bridge.mjs",
