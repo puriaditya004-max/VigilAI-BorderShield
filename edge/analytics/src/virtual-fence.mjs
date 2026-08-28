@@ -1,3 +1,5 @@
+import { createIncidentId } from "./ids.mjs";
+
 export function sideOfLine(point, line) {
   const { a, b } = line;
   return Math.sign((b.x - a.x) * (point.y - a.y) - (b.y - a.y) * (point.x - a.x));
@@ -91,7 +93,12 @@ export function objectClassAllowed(trackEvent, zone) {
 }
 
 export function buildIntrusionIncident({ trackEvent, zone, evidence, decision }) {
-  const incidentId = `inc-${trackEvent.cameraId}-${Date.now()}`;
+  const incidentId = evidence.incidentId || createIncidentId({
+    cameraId: trackEvent.cameraId,
+    type: "virtual-fence",
+    trackId: trackEvent.trackId,
+    captureTime: trackEvent.captureTime
+  });
 
   return {
     schemaVersion: "incident-event.v1",

@@ -13,6 +13,7 @@ import {
 import { detectFrameTamper, detectNightMovement } from "./night-watch.mjs";
 import { RollingFrameBuffer } from "./media-buffer.mjs";
 import { detectPlateCandidates, processVehicleAnprFrame } from "./anpr.mjs";
+import { createIncidentId } from "./ids.mjs";
 import { buildIntrusionIncident, crossedFence, FenceIncidentPolicy } from "./virtual-fence.mjs";
 import { detectFaceCandidatesFromImage } from "../../vision-runtime/src/privacy-redaction.mjs";
 import { registerCamera, sendEvidence, sendHealth, sendIncident } from "./control-client.mjs";
@@ -90,7 +91,12 @@ export async function runTrackBridge({
       const decision = fencePolicy.evaluate({ trackEvent: accumulatedTrackEvent, zone });
       if (!decision.allowed) continue;
 
-      const incidentHint = `inc-${accumulatedTrackEvent.cameraId}-${accumulatedTrackEvent.trackId}-${Date.parse(accumulatedTrackEvent.captureTime)}`;
+      const incidentHint = createIncidentId({
+        cameraId: accumulatedTrackEvent.cameraId,
+        type: "virtual-fence",
+        trackId: accumulatedTrackEvent.trackId,
+        captureTime: accumulatedTrackEvent.captureTime
+      });
       const evidence = await createEvidenceWithPrivacy({ incidentHint, trackEvent: accumulatedTrackEvent, zone, frameBuffers, createClipEvidence });
       const incident = buildIntrusionIncident({ trackEvent: accumulatedTrackEvent, zone, evidence, decision });
 
@@ -173,7 +179,12 @@ export async function evaluateAnprAnalytics({
     if (isCoolingDown(cooldowns, decision, now)) continue;
     rememberCooldown(cooldowns, decision, zone, now);
 
-    const incidentHint = `inc-${trackEvent.cameraId}-anpr-${trackEvent.trackId}-${now}`;
+    const incidentHint = createIncidentId({
+      cameraId: trackEvent.cameraId,
+      type: "anpr",
+      trackId: trackEvent.trackId,
+      captureTime: trackEvent.captureTime
+    });
     let evidence = await createEvidenceWithPrivacy({ incidentHint, trackEvent, zone, frameBuffers, createClipEvidence });
     evidence = attachRedactionMetadata(evidence, [
       ...(evidence.metadata?.redactions || []),
@@ -225,7 +236,12 @@ export async function evaluateIntegratedAnalytics({
     for (const decision of analyticsDecisions({ trackEvent, zone, latestTracks })) {
       if (!decision.detected || isCoolingDown(cooldowns, decision, now)) continue;
       rememberCooldown(cooldowns, decision, zone, now);
-      const incidentHint = `inc-${trackEvent.cameraId}-${String(decision.type).toLowerCase()}-${trackEvent.trackId || "frame"}-${now}`;
+      const incidentHint = createIncidentId({
+        cameraId: trackEvent.cameraId,
+        type: decision.type,
+        trackId: trackEvent.trackId || decision.trackId || decision.trackIds?.join("-") || "frame",
+        captureTime: trackEvent.captureTime
+      });
       const evidence = await createEvidenceWithPrivacy({ incidentHint, trackEvent, zone, frameBuffers, createClipEvidence });
       incidents.push({
         decision,

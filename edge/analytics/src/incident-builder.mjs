@@ -1,6 +1,13 @@
+import { createIncidentId } from "./ids.mjs";
+
 export function buildAnalyticsIncident({ cameraId, zoneId, trackId, decision, evidence, captureTime = new Date().toISOString() }) {
   const type = incidentType(decision.type);
-  const incidentId = `inc-${cameraId}-${String(decision.type || "analytics").toLowerCase()}-${Date.parse(captureTime)}`;
+  const incidentId = evidence.incidentId || createIncidentId({
+    cameraId,
+    type: decision.type || "analytics",
+    trackId: trackId || decision.trackId || decision.trackIds?.join("-") || "frame",
+    captureTime
+  });
 
   return {
     schemaVersion: "incident-event.v1",
