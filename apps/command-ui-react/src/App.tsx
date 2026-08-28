@@ -1,11 +1,18 @@
 import { useState } from "react";
+import { evidenceAssetUrl, updateIncidentStatus } from "./api";
 import { useDashboardData } from "./hooks/useDashboardData";
-import type { Incident, OperatorRole } from "./types";
+import type { EvidenceManifest, Incident, OperatorRole } from "./types";
 
 export function App() {
   const [role, setRole] = useState<OperatorRole>("COMMANDER");
-  const { data, connectionState, error, refresh } = useDashboardData(role);
+  const [selectedIncidentId, setSelectedIncidentId] = useState<string | null>(null);
+  const [actionNote, setActionNote] = useState("");
+  const [actionError, setActionError] = useState<string | null>(null);
+  const [pendingAction, setPendingAction] = useState<"acknowledge" | "escalate" | null>(null);
+  const { data, operator, connectionState, error, refresh, setData } = useDashboardData(role);
   const loading = connectionState === "loading";
+  const selectedIncident = data.incidents.find((incident) => incident.incidentId === selectedIncidentId) || data.incidents[0] || null;
+  const selectedEvidence = selectedIncident ? data.evidence.find((manifest) => manifest.incidentId === selectedIncident.incidentId || manifest.manifestId === selectedIncident.evidence?.manifestId) : null;
 
   const highCritical = (data.metrics.incidents?.bySeverity?.HIGH || 0) + (data.metrics.incidents?.bySeverity?.CRITICAL || 0);
   const openIncidents = data.metrics.incidents?.open ?? data.incidents.filter((incident) => incident.status === "OPEN").length;
@@ -51,7 +58,12 @@ export function App() {
           {!loading && data.incidents.length === 0 ? <EmptyState message="No incidents yet. Run the edge pipeline to populate the feed." /> : null}
           <div className="incident-list">
             {data.incidents.map((incident) => (
-              <IncidentCard incident={incident} key={incident.incidentId} />
+              <IncidentCard
+                incident={incident}
+                key={incident.incidentId}
+                selected={selectedIncident?.incidentId === incident.incidentId}
+                onSelect={() => setSelectedIncidentId(incident.incidentId)}
+              />
             ))}
           </div>
         </Panel>
@@ -85,6 +97,44 @@ export function App() {
             ))}
           </div>
           </Panel>
+
+          <Panel title="Incident Detail">
+            {selectedIncident ? (
+              <IncidentDetail
+                incident={selectedIncident}
+                evidence={selectedEvidence}
+                note={actionNote}
+                actionError={actionError}
+                pendingAction={pendingAction}
+                onNoteChange={setActionNote}
+                onAction={async (action) => {
+                  setPendingAction(action);
+                  setActionError(null);
+                  const previousData = data;
+                  const optimisticStatus = action === "acknowledge" ? "ACKNOWLEDGED" : "ESCALATED";
+                  setData({
+                    ...data,
+                    incidents: data.incidents.map((incident) => incident.incidentId === selectedIncident.incidentId ? { ...incident, status: optimisticStatus } : incident)
+                  });
+                  try {
+                    await updateIncidentStatus(selectedIncident.incidentId, action, {
+                      note: actionNote || `${action === "acknowledge" ? "Acknowledged" : "Escalated"} from React command UI`,
+                      target: "sector-command"
+                    }, operator);
+                    setActionNote("");
+                    await refresh();
+                  } catch (err) {
+                    setData(previousData);
+                    setActionError(err instanceof Error ? err.message : "Incident action failed");
+                  } finally {
+                    setPendingAction(null);
+                  }
+                }}
+              />
+            ) : (
+              <EmptyState message="Select an incident to inspect evidence and workflow actions." />
+            )}
+          </Panel>
         </div>
       </section>
     </main>
@@ -111,9 +161,9 @@ function Panel({ title, children, wide = false }: { title: string; children: Rea
   );
 }
 
-function IncidentCard({ incident }: { incident: Incident }) {
+function IncidentCard({ incident, selected, onSelect }: { incident: Incident; selected: boolean; onSelect: () => void }) {
   return (
-    <article className="incident-card">
+    <button type="button" className={selected ? "incident-card selected" : "incident-card"} onClick={onSelect}>
       <div className="incident-title">
         <span className={`severity ${String(incident.severity).toLowerCase()}`}>{incident.severity}</span>
         <div>
@@ -136,7 +186,88 @@ function IncidentCard({ incident }: { incident: Incident }) {
           <dd>{formatTime(incident.captureTime)}</dd>
         </div>
       </dl>
-    </article>
+    </button>
+  );
+}
+
+function IncidentDetail({
+  incident,
+  evidence,
+  note,
+  actionError,
+  pendingAction,
+  onNoteChange,
+  onAction
+}: {
+  incident: Incident;
+  evidence: EvidenceManifest | null;
+  note: string;
+  actionError: string | null;
+  pendingAction: "acknowledge" | "escalate" | null;
+  onNoteChange: (value: string) => void;
+  onAction: (action: "acknowledge" | "escalate") => void;
+}) {
+  const imageAsset = evidence?.assets.find((asset) => asset.contentType?.startsWith("image/"));
+  const videoAsset = evidence?.assets.find((asset) => asset.contentType === "video/mp4");
+  const unavailableReasons = evidence?.metadata?.clipReasonCodes || [];
+  const canAcknowledge = incident.status === "OPEN";
+
+  return (
+    <div className="detail">
+      <div className="detail-heading">
+        <div>
+          <h3>{incident.type.replaceAll("_", " ")}</h3>
+          <p>{incident.incidentId}</p>
+        </div>
+        <span className={`severity ${String(incident.severity).toLowerCase()}`}>{incident.severity}</span>
+      </div>
+
+      <div className="detail-grid">
+        <StatusLine label="Status" value={incident.status} />
+        <StatusLine label="Confidence" value={incident.confidence === undefined ? "Not provided" : String(incident.confidence)} />
+        <StatusLine label="Model" value={incident.model?.version || incident.model?.name || "Not provided"} />
+        <StatusLine label="Rule" value={incident.rule?.version || incident.rule?.id || "Not provided"} />
+      </div>
+
+      <section className="reason-box">
+        <h4>Reason Codes</h4>
+        {incident.rule?.reasonCodes?.length ? (
+          <ul>
+            {incident.rule.reasonCodes.map((code) => <li key={code}>{code}</li>)}
+          </ul>
+        ) : (
+          <p>No reason codes supplied by the backend.</p>
+        )}
+      </section>
+
+      <section className="evidence-box">
+        <h4>Evidence</h4>
+        {imageAsset ? (
+          <img src={evidenceAssetUrl(imageAsset.assetUrl)} alt={`Evidence keyframe for ${incident.incidentId}`} />
+        ) : (
+          <div className="empty">Evidence unavailable: keyframe asset not present</div>
+        )}
+        {videoAsset ? (
+          <video src={evidenceAssetUrl(videoAsset.assetUrl)} controls />
+        ) : (
+          <div className="empty">Evidence unavailable: {unavailableReasons.length ? unavailableReasons.join(", ") : "MP4 clip asset not present"}</div>
+        )}
+      </section>
+
+      <section className="workflow-box">
+        <h4>Operator Workflow</h4>
+        <textarea value={note} onChange={(event) => onNoteChange(event.target.value)} placeholder="Optional note" rows={3} />
+        <div className="actions">
+          <button type="button" disabled={!canAcknowledge || pendingAction !== null} onClick={() => onAction("acknowledge")}>
+            {pendingAction === "acknowledge" ? "Acknowledging..." : "Acknowledge"}
+          </button>
+          <button type="button" disabled={pendingAction !== null} onClick={() => onAction("escalate")}>
+            {pendingAction === "escalate" ? "Escalating..." : "Escalate"}
+          </button>
+        </div>
+        {actionError ? <p className="error-text">{actionError}</p> : null}
+      </section>
+    </div>
   );
 }
 

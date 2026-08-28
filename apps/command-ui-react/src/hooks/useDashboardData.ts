@@ -105,7 +105,7 @@ export function useDashboardData(role: OperatorRole) {
     };
   }, [operator, refresh]);
 
-  return { data, operator, connectionState, error, refresh };
+  return { data, operator, connectionState, error, refresh, setData };
 }
 
 function consumeEventMessages(buffer: string) {
