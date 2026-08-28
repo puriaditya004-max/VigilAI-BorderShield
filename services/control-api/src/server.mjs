@@ -9,7 +9,7 @@ import { buildRetentionSummary, expireEvidenceManifests } from "../../evidence-s
 import { appendAudit, ensureStore, readDb, updateDb } from "./store.mjs";
 import { badRequest, forbidden, notFound, payloadTooLarge, readJsonBody, sendJson, unauthorized, withSecurityHeaders } from "./http.mjs";
 import { notifyIncidentEvent } from "./notifier.mjs";
-import { authenticateOperator, clientRateLimitKey, createRateLimiter, hashDeviceKey, issueDeviceKey, publicCamera, publicCameraWithIssuedKey, verifyDeviceKey } from "./security.mjs";
+import { authenticateOperator, clientRateLimitKey, createRateLimiter, hashDeviceKey, issueDeviceKey, loginOperator, publicCamera, publicCameraWithIssuedKey, verifyDeviceKey } from "./security.mjs";
 import { buildSlaSummary } from "./sla.mjs";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -54,8 +54,12 @@ const server = http.createServer(async (req, res) => {
       return sendJson(res, 200, { status: "ok", service: "control-api", time: new Date().toISOString() });
     }
 
+    if (req.method === "POST" && url.pathname === "/api/auth/login") {
+      return login(req, res, await readJsonBody(req));
+    }
+
     if (req.method === "GET" && url.pathname === "/api/events") {
-      const auth = authenticateOperator(req, { requiredPermission: "incident:read" });
+      const auth = await authenticateOperator(req, { requiredPermission: "incident:read" });
       if (!auth.ok) return auth.statusCode === 403 ? forbidden(res, auth.message) : unauthorized(res, auth.message);
       return openEventStream(req, res);
     }
@@ -94,11 +98,11 @@ const server = http.createServer(async (req, res) => {
     }
 
     if (req.method === "GET" && url.pathname === "/api/incidents") {
-      return sendOperatorReadJson(req, res, (await readDb()).incidents.slice().reverse());
+      return await sendOperatorReadJson(req, res, (await readDb()).incidents.slice().reverse());
     }
 
     if (req.method === "GET" && url.pathname === "/api/incidents/sla") {
-      return sendOperatorReadJson(req, res, buildSlaSummary((await readDb()).incidents));
+      return await sendOperatorReadJson(req, res, buildSlaSummary((await readDb()).incidents));
     }
 
     if (req.method === "POST" && url.pathname === "/api/evidence/manifests") {
@@ -106,7 +110,7 @@ const server = http.createServer(async (req, res) => {
     }
 
     if (req.method === "GET" && url.pathname === "/api/evidence/manifests") {
-      return sendOperatorReadJson(req, res, (await readDb()).evidence.slice().reverse().map(publicEvidenceManifest));
+      return await sendOperatorReadJson(req, res, (await readDb()).evidence.slice().reverse().map(publicEvidenceManifest));
     }
 
     const evidenceAssetMatch = url.pathname.match(/^\/api\/evidence\/assets\/([^/]+)\/(\d+)$/);
@@ -122,11 +126,11 @@ const server = http.createServer(async (req, res) => {
     }
 
     if (req.method === "GET" && url.pathname === "/api/audit") {
-      return sendOperatorReadJson(req, res, (await readDb()).audits.slice().reverse());
+      return await sendOperatorReadJson(req, res, (await readDb()).audits.slice().reverse());
     }
 
     if (req.method === "GET" && url.pathname === "/api/metrics") {
-      return sendOperatorReadJson(req, res, buildMetrics(await readDb()));
+      return await sendOperatorReadJson(req, res, buildMetrics(await readDb()));
     }
 
     return notFound(res);
@@ -141,6 +145,31 @@ const server = http.createServer(async (req, res) => {
 server.listen(PORT, () => {
   console.log(`Control API listening on http://localhost:${PORT}`);
 });
+
+async function login(req, res, body) {
+  const result = await loginOperator({
+    username: String(body.username || "").trim(),
+    password: String(body.password || "")
+  });
+  if (!result.ok) {
+    return result.statusCode === 503
+      ? sendJson(res, 503, { error: "auth_dependency_unavailable", message: result.message })
+      : unauthorized(res, result.message);
+  }
+  updateDb((db) => {
+    appendAudit(db, {
+      actor: result.operator.operatorId,
+      action: "operator.login",
+      resource: result.operator.role,
+      requestId: req.headers["idempotency-key"]
+    });
+    return null;
+  }).catch((error) => console.error(`operator login audit failed: ${error.message}`));
+  return sendJson(res, 200, {
+    token: result.token,
+    operator: result.operator
+  });
+}
 
 async function registerCamera(req, res, body) {
   const { cameraId, name, edgeNodeId, location, streamUri } = body;
@@ -245,7 +274,7 @@ async function createIncident(req, res, body) {
 
 async function updateIncidentLifecycle(req, res, { incidentId, action, body }) {
   const permission = action === "acknowledge" ? "incident:acknowledge" : "incident:escalate";
-  const auth = authenticateOperator(req, { requiredPermission: permission });
+  const auth = await authenticateOperator(req, { requiredPermission: permission });
   if (!auth.ok) return auth.statusCode === 403 ? forbidden(res, auth.message) : unauthorized(res, auth.message);
 
   const result = await updateDb((db) => {
@@ -327,8 +356,8 @@ async function createEvidenceManifest(req, res, body) {
   return sendJson(res, result.created ? 201 : 200, result.manifest);
 }
 
-function sendOperatorReadJson(req, res, payload) {
-  const auth = authenticateOperator(req, { requiredPermission: "incident:read" });
+async function sendOperatorReadJson(req, res, payload) {
+  const auth = await authenticateOperator(req, { requiredPermission: "incident:read" });
   if (!auth.ok) return auth.statusCode === 403 ? forbidden(res, auth.message) : unauthorized(res, auth.message);
   return sendJson(res, 200, payload);
 }
@@ -348,7 +377,7 @@ function publicEvidenceManifest(manifest) {
 }
 
 async function serveEvidenceAsset(req, res, { manifestId, assetIndex }) {
-  const auth = authenticateOperator(req, { requiredPermission: "incident:read" });
+  const auth = await authenticateOperator(req, { requiredPermission: "incident:read" });
   if (!auth.ok) return auth.statusCode === 403 ? forbidden(res, auth.message) : unauthorized(res, auth.message);
 
   const manifest = (await readDb()).evidence.find((item) => item.manifestId === manifestId);
@@ -380,7 +409,7 @@ async function serveEvidenceAsset(req, res, { manifestId, assetIndex }) {
 }
 
 async function runEvidenceRetention(req, res, body) {
-  const auth = authenticateOperator(req, { requiredPermission: "incident:escalate" });
+  const auth = await authenticateOperator(req, { requiredPermission: "incident:escalate" });
   if (!auth.ok) return auth.statusCode === 403 ? forbidden(res, auth.message) : unauthorized(res, auth.message);
 
   const result = await updateDb((db) => {

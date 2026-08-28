@@ -1,6 +1,6 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { fetchDashboardData, operatorHeaders } from "../api";
-import type { DashboardData, OperatorRole } from "../types";
+import type { DashboardData, OperatorSession } from "../types";
 
 export type ConnectionState = "loading" | "live" | "polling" | "offline";
 
@@ -23,16 +23,11 @@ const LIVE_REFRESH_EVENTS = new Set([
   "evidence.verified"
 ]);
 
-export function useDashboardData(role: OperatorRole) {
+export function useDashboardData(operator: OperatorSession) {
   const [data, setData] = useState<DashboardData>(emptyData);
   const [connectionState, setConnectionState] = useState<ConnectionState>("loading");
   const [error, setError] = useState<string | null>(null);
   const cancelled = useRef(false);
-
-  const operator = useMemo(() => ({
-    operatorId: "sih-demo-operator",
-    role
-  }), [role]);
 
   const refresh = useCallback(async () => {
     try {

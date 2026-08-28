@@ -31,18 +31,18 @@ assert.equal(limiter.check("client-a", 100).allowed, true);
 assert.equal(limiter.check("client-a", 200).allowed, false);
 assert.equal(limiter.check("client-a", 1200).allowed, true);
 
-const operator = authenticateOperator(mockReq({ "x-operator-id": "op-1", "x-operator-role": "OPERATOR" }), {
+const operator = await authenticateOperator(mockReq({ "x-operator-id": "op-1", "x-operator-role": "OPERATOR" }), {
   requiredPermission: "incident:acknowledge"
 });
 assert.equal(operator.ok, true);
 
-const viewer = authenticateOperator(mockReq({ "x-operator-id": "viewer-1", "x-operator-role": "VIEWER" }), {
+const viewer = await authenticateOperator(mockReq({ "x-operator-id": "viewer-1", "x-operator-role": "VIEWER" }), {
   requiredPermission: "incident:acknowledge"
 });
 assert.equal(viewer.ok, false);
 assert.equal(viewer.statusCode, 403);
 
-const missing = authenticateOperator(mockReq({}));
+const missing = await authenticateOperator(mockReq({}));
 assert.equal(missing.ok, false);
 assert.equal(missing.statusCode, 401);
 

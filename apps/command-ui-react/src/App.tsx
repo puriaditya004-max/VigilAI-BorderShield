@@ -1,15 +1,24 @@
 import { useState } from "react";
-import { evidenceAssetUrl, updateIncidentStatus } from "./api";
+import { evidenceAssetUrl, loginOperator, updateIncidentStatus } from "./api";
 import { useDashboardData } from "./hooks/useDashboardData";
-import type { EvidenceManifest, Incident, OperatorRole } from "./types";
+import type { EvidenceManifest, Incident, OperatorRole, OperatorSession } from "./types";
 
 export function App() {
   const [role, setRole] = useState<OperatorRole>("COMMANDER");
+  const [session, setSession] = useState<OperatorSession>(() => loadSession() || {
+    operatorId: "sih-demo-operator",
+    role: "COMMANDER"
+  });
+  const [loginOpen, setLoginOpen] = useState(false);
+  const [loginForm, setLoginForm] = useState({ username: "", password: "" });
+  const [loginError, setLoginError] = useState<string | null>(null);
+  const [loginPending, setLoginPending] = useState(false);
   const [selectedIncidentId, setSelectedIncidentId] = useState<string | null>(null);
   const [actionNote, setActionNote] = useState("");
   const [actionError, setActionError] = useState<string | null>(null);
   const [pendingAction, setPendingAction] = useState<"acknowledge" | "escalate" | null>(null);
-  const { data, operator, connectionState, error, refresh, setData } = useDashboardData(role);
+  const operator = session.token ? session : { ...session, role };
+  const { data, connectionState, error, refresh, setData } = useDashboardData(operator);
   const loading = connectionState === "loading";
   const selectedIncident = data.incidents.find((incident) => incident.incidentId === selectedIncidentId) || data.incidents[0] || null;
   const selectedEvidence = selectedIncident ? data.evidence.find((manifest) => manifest.incidentId === selectedIncident.incidentId || manifest.manifestId === selectedIncident.evidence?.manifestId) : null;
@@ -27,13 +36,26 @@ export function App() {
         <div className="toolbar">
           <label>
             <span>Role</span>
-            {/* Dev convenience only. Real authentication belongs to a later backend auth milestone. */}
-            <select value={role} onChange={(event) => setRole(event.target.value as OperatorRole)}>
+            <select value={operator.role} disabled={Boolean(session.token)} onChange={(event) => {
+              const nextRole = event.target.value as OperatorRole;
+              setRole(nextRole);
+              setSession({ operatorId: "sih-demo-operator", role: nextRole });
+            }}>
               <option value="VIEWER">Viewer</option>
               <option value="OPERATOR">Operator</option>
               <option value="COMMANDER">Commander</option>
             </select>
           </label>
+          {session.token ? (
+            <button type="button" onClick={() => {
+              window.localStorage.removeItem("vigilai.operatorSession");
+              const next = { operatorId: "sih-demo-operator", role: "COMMANDER" as OperatorRole };
+              setRole(next.role);
+              setSession(next);
+            }}>Sign Out</button>
+          ) : (
+            <button type="button" onClick={() => setLoginOpen((current) => !current)}>Sign In</button>
+          )}
           <button type="button" onClick={refresh}>Refresh</button>
           <span className="status" data-state={error ? "offline" : "online"}>
             {error ? "Offline" : connectionState === "live" ? "Live" : connectionState === "polling" ? "Polling" : "Checking"}
@@ -42,6 +64,37 @@ export function App() {
       </header>
 
       {error ? <div className="banner">Control API unavailable: {error}</div> : null}
+      {loginOpen ? (
+        <form className="login-panel" onSubmit={async (event) => {
+          event.preventDefault();
+          setLoginPending(true);
+          setLoginError(null);
+          try {
+            const result = await loginOperator(loginForm.username, loginForm.password);
+            const nextSession = { ...result.operator, token: result.token };
+            window.localStorage.setItem("vigilai.operatorSession", JSON.stringify(nextSession));
+            setRole(nextSession.role);
+            setSession(nextSession);
+            setLoginOpen(false);
+            setLoginForm({ username: "", password: "" });
+          } catch (err) {
+            setLoginError(err instanceof Error ? err.message : "Login failed");
+          } finally {
+            setLoginPending(false);
+          }
+        }}>
+          <label>
+            <span>Username</span>
+            <input value={loginForm.username} onChange={(event) => setLoginForm({ ...loginForm, username: event.target.value })} autoComplete="username" />
+          </label>
+          <label>
+            <span>Password</span>
+            <input type="password" value={loginForm.password} onChange={(event) => setLoginForm({ ...loginForm, password: event.target.value })} autoComplete="current-password" />
+          </label>
+          <button type="submit" disabled={loginPending}>{loginPending ? "Signing In..." : "Sign In"}</button>
+          {loginError ? <p className="error-text">{loginError}</p> : null}
+        </form>
+      ) : null}
 
       <section className="metrics" aria-label="System overview">
         <Metric label="Cameras" value={data.metrics.cameras?.total ?? data.cameras.length} />
@@ -153,6 +206,15 @@ export function App() {
       </section>
     </main>
   );
+}
+
+function loadSession(): OperatorSession | null {
+  try {
+    const raw = window.localStorage.getItem("vigilai.operatorSession");
+    return raw ? JSON.parse(raw) as OperatorSession : null;
+  } catch {
+    return null;
+  }
 }
 
 function Metric({ label, value }: { label: string; value: number | string }) {

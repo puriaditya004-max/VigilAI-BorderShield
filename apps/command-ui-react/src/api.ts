@@ -1,4 +1,4 @@
-import type { AuditEvent, Camera, DashboardData, EvidenceManifest, Incident, Metrics, OperatorRole, Zone } from "./types";
+import type { AuditEvent, Camera, DashboardData, EvidenceManifest, Incident, Metrics, OperatorRole, OperatorSession, Zone } from "./types";
 
 export interface OperatorContext {
   operatorId: string;
@@ -31,6 +31,10 @@ export async function updateIncidentStatus(
   return postJson<Incident>(`/api/incidents/${encodeURIComponent(incidentId)}/${action}`, body, operator);
 }
 
+export async function loginOperator(username: string, password: string): Promise<{ token: string; operator: OperatorSession }> {
+  return postPublicJson("/api/auth/login", { username, password });
+}
+
 export function evidenceAssetUrl(assetUrl: string): string {
   return `${API_BASE}${assetUrl}`;
 }
@@ -60,6 +64,19 @@ async function postJson<T>(path: string, body: unknown, operator: OperatorContex
       "content-type": "application/json",
       "idempotency-key": `react-ui-${Date.now()}-${Math.random().toString(16).slice(2)}`
     }),
+    body: JSON.stringify(body)
+  });
+  if (!response.ok) throw new Error(`${path} ${response.status}`);
+  return response.json() as Promise<T>;
+}
+
+async function postPublicJson<T>(path: string, body: unknown): Promise<T> {
+  const response = await fetch(`${API_BASE}${path}`, {
+    method: "POST",
+    headers: {
+      "content-type": "application/json",
+      "idempotency-key": `react-login-${Date.now()}-${Math.random().toString(16).slice(2)}`
+    },
     body: JSON.stringify(body)
   });
   if (!response.ok) throw new Error(`${path} ${response.status}`);

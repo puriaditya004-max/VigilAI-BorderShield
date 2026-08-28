@@ -118,7 +118,7 @@ Verification completed on 2026-08-26:
 | PostgreSQL storage migration | DONE | SQL schema/migration runner, Postgres store adapter, fresh-schema smoke test and JSON import path exist; see `docs/runbooks/postgres-migration.md`. `STORE_DRIVER` defaults to JSON through the `store.mjs` selector, while `store-postgres.mjs` implements the same read/update/write/audit interface with transactional read-mutate-write semantics. Verified by the user end-to-end against a real local PostgreSQL 16 container with `npm run db:migrate` followed by `npm run postgres:test`; the smoke test round-tripped camera registration, incident creation, evidence manifest assets and audit persistence through Postgres. |
 | Hashed device-key storage | DONE | New/rotated camera keys are stored as SHA-256 hashes; plaintext key is returned only on issuance. |
 | Public camera response redaction | DONE | `GET /api/cameras` removes `deviceKey` and `deviceKeyHash` fields. |
-| Operator auth and RBAC | PARTIAL | Header/token-based operator foundation with VIEWER/OPERATOR/COMMANDER permissions; persistent login/session UI pending. |
+| Operator auth and RBAC | PARTIAL | Header/token-based operator foundation remains the default for SIH demos. `OPERATOR_AUTH_MODE=jwt` adds a real login endpoint, signed operator JWTs, role permissions and React command-center session storage, with Argon2 PHC password hashes required at runtime; full user-management/admin provisioning and MFA are pending. |
 | TLS or mTLS enforcement | BLOCKED | Requires deployment certificates and reverse proxy/runtime configuration. |
 
 ## Phase 5 - Operator Incident Workflow
@@ -127,7 +127,7 @@ Verification completed on 2026-08-26:
 |---|---|---|
 | Operator identity on actions | DONE | `authenticateOperator()` requires `x-operator-id` and records actor in audit events. |
 | Role-based permissions | DONE | VIEWER, OPERATOR and COMMANDER permissions in `services/control-api/src/security.mjs`, covered by `tests/unit/control-api-security.test.mjs`. |
-| Optional operator bearer token | PARTIAL | `OPERATOR_TOKEN` enforces bearer token when configured; full login/session issuance pending. |
+| Optional operator bearer token | PARTIAL | `OPERATOR_TOKEN` still enforces a static bearer token in header mode; `OPERATOR_AUTH_MODE=jwt` issues signed session bearer tokens after Argon2 password verification. |
 | Incident acknowledgement | DONE | `POST /api/incidents/:incidentId/acknowledge` sets status, actor, timestamp and audit entry. |
 | Incident escalation | DONE | `POST /api/incidents/:incidentId/escalate` sets status, target, actor, timestamp and audit entry. |
 | Lifecycle realtime events | DONE | Acknowledge/escalate actions publish SSE events consumed by the dashboard. |
@@ -224,7 +224,7 @@ npm run validation:production
 ## Known Security and Privacy Limitations
 
 - New and rotated device keys are hashed in local JSON; existing legacy plaintext keys are accepted only for backward compatibility until rotation.
-- Operator RBAC protects incident actions plus sensitive incident/evidence/audit/metrics reads, but there is no persistent login/session UI, MFA, or TLS/mTLS enforcement yet.
+- Operator RBAC protects incident actions plus sensitive incident/evidence/audit/metrics reads. JWT login/session UI exists for `OPERATOR_AUTH_MODE=jwt`, but MFA, account recovery and TLS/mTLS enforcement are still pending.
 - Rate limiting is in-memory and single-process only; production should use a shared limiter behind the deployment gateway.
 - Camera source configs support env/file secret references for RTSP URIs; avoid committing raw camera credentials.
 - Face detection has a privacy-only candidate/redaction foundation and optional detector adapter; no identity recognition, matching or biometric embeddings are implemented.

@@ -127,3 +127,11 @@ export interface DashboardData {
   audit: AuditEvent[];
   metrics: Metrics;
 }
+
+export interface OperatorSession {
+  operatorId: string;
+  username?: string;
+  role: OperatorRole;
+  token?: string;
+  permissions?: string[];
+}

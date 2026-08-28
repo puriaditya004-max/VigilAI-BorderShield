@@ -32,6 +32,7 @@ textarea {
 
 button,
 select,
+input,
 textarea {
   border: 1px solid var(--line);
   border-radius: 6px;
@@ -56,6 +57,11 @@ button:disabled {
 
 select {
   padding: 0 34px 0 10px;
+}
+
+input {
+  min-height: 38px;
+  padding: 0 10px;
 }
 
 .shell {
@@ -152,6 +158,28 @@ h2 {
 .banner {
   margin-bottom: 14px;
   color: var(--warn);
+}
+
+.login-panel {
+  display: grid;
+  grid-template-columns: minmax(160px, 1fr) minmax(160px, 1fr) auto;
+  gap: 10px;
+  align-items: end;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel);
+  margin-bottom: 14px;
+  padding: 14px;
+}
+
+.login-panel label {
+  display: grid;
+  gap: 5px;
+}
+
+.login-panel span {
+  color: var(--muted);
+  font-size: 12px;
 }
 
 .metrics {
@@ -422,6 +450,7 @@ h2 {
 
 @media (max-width: 680px) {
   .topbar,
+  .login-panel,
   .metrics,
   .command-grid,
   .incident-meta {
