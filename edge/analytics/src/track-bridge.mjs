@@ -23,6 +23,10 @@ const cameraConfigPath = process.env.CAMERA_CONFIG || "edge/edge-agent/config/ca
 const zonesConfigPath = process.env.ZONES_CONFIG || "edge/analytics/config/zones.json";
 const TRAJECTORY_HISTORY_POINTS = Number(process.env.TRACK_TRAJECTORY_HISTORY_POINTS || 20);
 const TRACK_STATE_TTL_MS = Number(process.env.ANALYTICS_TRACK_STATE_TTL_MS || 5 * 60 * 1000);
+const REGISTER_BACKOFF_BASE_MS = Number(process.env.EDGE_REGISTER_BACKOFF_BASE_MS || 2000);
+const REGISTER_BACKOFF_MAX_MS = Number(process.env.EDGE_REGISTER_BACKOFF_MAX_MS || 60000);
+const REPLAY_BACKOFF_BASE_MS = Number(process.env.EDGE_OUTBOX_REPLAY_BACKOFF_BASE_MS || 2000);
+const REPLAY_BACKOFF_MAX_MS = Number(process.env.EDGE_OUTBOX_REPLAY_BACKOFF_MAX_MS || 30000);
 
 export async function runTrackBridge({
   input = process.stdin,
@@ -33,7 +37,9 @@ export async function runTrackBridge({
 } = {}) {
   const camera = JSON.parse(fs.readFileSync(cameraConfig, "utf8"));
   const zones = JSON.parse(fs.readFileSync(zonesConfig, "utf8"));
-  const registration = { value: await tryRegisterCamera({ endpoint, camera }) };
+  const registrationBackoff = createBackoffState({ baseMs: REGISTER_BACKOFF_BASE_MS, maxMs: REGISTER_BACKOFF_MAX_MS });
+  const replayBackoff = createBackoffState({ baseMs: REPLAY_BACKOFF_BASE_MS, maxMs: REPLAY_BACKOFF_MAX_MS });
+  const registration = { value: await tryRegisterCamera({ endpoint, camera, backoff: registrationBackoff }) };
   if (registration.value?.deviceKey) {
     await sendHealth({ endpoint, camera, deviceKey: registration.value.deviceKey }).catch((error) => {
       console.error(`Camera health skipped: ${error.message}`);
@@ -88,7 +94,7 @@ export async function runTrackBridge({
       const evidence = await createEvidenceWithPrivacy({ incidentHint, trackEvent: accumulatedTrackEvent, zone, frameBuffers, createClipEvidence });
       const incident = buildIntrusionIncident({ trackEvent: accumulatedTrackEvent, zone, evidence, decision });
 
-      await publishIncident({ endpoint, incident, evidence, camera, registration });
+      await publishIncident({ endpoint, incident, evidence, camera, registration, registrationBackoff, replayBackoff });
       emitted.push(incident);
     }
 
@@ -101,7 +107,7 @@ export async function runTrackBridge({
       createClipEvidence
     });
     for (const { incident, evidence } of analyticsIncidents) {
-      await publishIncident({ endpoint, incident, evidence, camera, registration });
+      await publishIncident({ endpoint, incident, evidence, camera, registration, registrationBackoff, replayBackoff });
       emitted.push(incident);
     }
 
@@ -114,7 +120,7 @@ export async function runTrackBridge({
       createClipEvidence
     });
     for (const { incident, evidence } of anprIncidents) {
-      await publishIncident({ endpoint, incident, evidence, camera, registration });
+      await publishIncident({ endpoint, incident, evidence, camera, registration, registrationBackoff, replayBackoff });
       emitted.push(incident);
     }
   }
@@ -388,18 +394,23 @@ function withSeverity(config, zone) {
   return { ...config, severity: config.severity || zone.severity || "MEDIUM" };
 }
 
-async function tryRegisterCamera({ endpoint, camera }) {
+async function tryRegisterCamera({ endpoint, camera, backoff }) {
   try {
-    return await registerCamera({ endpoint, camera });
+    const registered = await registerCamera({ endpoint, camera });
+    resetBackoff(backoff);
+    return registered;
   } catch (error) {
     console.error(`Camera registration unavailable; incidents will queue until command link recovers: ${error.message}`);
+    recordBackoffFailure(backoff);
     return { deviceKey: process.env.EDGE_DEVICE_KEY || camera.deviceKey || null, offline: true };
   }
 }
 
-async function ensureRegistered({ endpoint, camera, registration }) {
+async function ensureRegistered({ endpoint, camera, registration, registrationBackoff }) {
   if (registration.value?.deviceKey && registration.value.offline !== true) return registration.value;
-  const next = await tryRegisterCamera({ endpoint, camera });
+  if (!backoffReady(registrationBackoff, "Camera registration")) return null;
+
+  const next = await tryRegisterCamera({ endpoint, camera, backoff: registrationBackoff });
   if (next?.deviceKey) {
     registration.value = next;
     await sendHealth({ endpoint, camera, deviceKey: next.deviceKey }).catch(() => {});
@@ -407,8 +418,8 @@ async function ensureRegistered({ endpoint, camera, registration }) {
   return registration.value;
 }
 
-async function publishIncident({ endpoint, incident, evidence, camera, registration }) {
-  const registered = await ensureRegistered({ endpoint, camera, registration });
+async function publishIncident({ endpoint, incident, evidence, camera, registration, registrationBackoff, replayBackoff }) {
+  const registered = await ensureRegistered({ endpoint, camera, registration, registrationBackoff });
   if (!registered?.deviceKey) {
     enqueueIncident(incident);
     return;
@@ -420,8 +431,52 @@ async function publishIncident({ endpoint, incident, evidence, camera, registrat
     enqueueIncident(incident);
   } else {
     await sendEvidence({ endpoint, evidence, deviceKey: registered.deviceKey, cameraId: incident.cameraId });
-    await replayOutbox({ endpoint, deviceKey: registered.deviceKey });
+    if (!backoffReady(replayBackoff, "Outbox replay")) return;
+    const replayed = await replayOutbox({ endpoint, deviceKey: registered.deviceKey }).catch((error) => {
+      console.error(`Outbox replay unavailable; retry will back off: ${error.message}`);
+      return [{ status: "failed", code: "fetch_error" }];
+    });
+    if (replayed.some((item) => item.status === "failed")) {
+      recordBackoffFailure(replayBackoff);
+    } else {
+      resetBackoff(replayBackoff);
+    }
   }
+}
+
+function createBackoffState({ baseMs, maxMs }) {
+  return {
+    baseMs: Math.max(1, baseMs),
+    maxMs: Math.max(1, maxMs),
+    failures: 0,
+    nextAttemptAt: 0,
+    loggedUntil: 0
+  };
+}
+
+function backoffReady(backoff, label, now = Date.now()) {
+  if (!backoff || now >= backoff.nextAttemptAt) return true;
+  if (backoff.loggedUntil !== backoff.nextAttemptAt) {
+    const waitSeconds = Math.ceil((backoff.nextAttemptAt - now) / 1000);
+    console.error(`${label} backing off until ${new Date(backoff.nextAttemptAt).toISOString()}, next attempt in ${waitSeconds}s`);
+    backoff.loggedUntil = backoff.nextAttemptAt;
+  }
+  return false;
+}
+
+function recordBackoffFailure(backoff, now = Date.now()) {
+  if (!backoff) return;
+  backoff.failures += 1;
+  const delayMs = Math.min(backoff.maxMs, backoff.baseMs * (2 ** Math.max(0, backoff.failures - 1)));
+  backoff.nextAttemptAt = now + delayMs;
+  backoff.loggedUntil = 0;
+}
+
+function resetBackoff(backoff) {
+  if (!backoff) return;
+  backoff.failures = 0;
+  backoff.nextAttemptAt = 0;
+  backoff.loggedUntil = 0;
 }
 
 function isCoolingDown(cooldowns, decision, now) {
