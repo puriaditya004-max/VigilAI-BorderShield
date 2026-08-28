@@ -1,7 +1,7 @@
 import { appendAudit, readDb, writeDb } from "../../control-api/src/store.mjs";
 import { buildRetentionSummary, expireEvidenceManifests } from "./retention.mjs";
 
-const db = readDb();
+const db = await readDb();
 const retention = expireEvidenceManifests(db);
 appendAudit(db, {
   actor: "system-retention",
@@ -9,6 +9,6 @@ appendAudit(db, {
   resource: `expired:${retention.expired.length}`,
   requestId: "retention-cli"
 });
-writeDb(db);
+await writeDb(db);
 
 console.log(JSON.stringify({ ...retention, summary: buildRetentionSummary(db) }, null, 2));
