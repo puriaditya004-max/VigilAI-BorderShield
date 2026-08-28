@@ -29,7 +29,7 @@ const schemas = {
   evidence: readJson(path.join(root, "packages/contracts/schemas/evidence-manifest.schema.json"))
 };
 
-ensureStore();
+await ensureStore();
 
 const server = http.createServer(async (req, res) => {
   try {
@@ -73,11 +73,11 @@ const server = http.createServer(async (req, res) => {
     }
 
     if (req.method === "GET" && url.pathname === "/api/cameras") {
-      return sendJson(res, 200, readDb().cameras.map(publicCamera));
+      return sendJson(res, 200, (await readDb()).cameras.map(publicCamera));
     }
 
     if (req.method === "GET" && url.pathname === "/api/zones") {
-      return sendJson(res, 200, readDb().zones);
+      return sendJson(res, 200, (await readDb()).zones);
     }
 
     if (req.method === "POST" && url.pathname === "/api/incidents") {
@@ -94,11 +94,11 @@ const server = http.createServer(async (req, res) => {
     }
 
     if (req.method === "GET" && url.pathname === "/api/incidents") {
-      return sendOperatorReadJson(req, res, readDb().incidents.slice().reverse());
+      return sendOperatorReadJson(req, res, (await readDb()).incidents.slice().reverse());
     }
 
     if (req.method === "GET" && url.pathname === "/api/incidents/sla") {
-      return sendOperatorReadJson(req, res, buildSlaSummary(readDb().incidents));
+      return sendOperatorReadJson(req, res, buildSlaSummary((await readDb()).incidents));
     }
 
     if (req.method === "POST" && url.pathname === "/api/evidence/manifests") {
@@ -106,7 +106,7 @@ const server = http.createServer(async (req, res) => {
     }
 
     if (req.method === "GET" && url.pathname === "/api/evidence/manifests") {
-      return sendOperatorReadJson(req, res, readDb().evidence.slice().reverse().map(publicEvidenceManifest));
+      return sendOperatorReadJson(req, res, (await readDb()).evidence.slice().reverse().map(publicEvidenceManifest));
     }
 
     const evidenceAssetMatch = url.pathname.match(/^\/api\/evidence\/assets\/([^/]+)\/(\d+)$/);
@@ -122,11 +122,11 @@ const server = http.createServer(async (req, res) => {
     }
 
     if (req.method === "GET" && url.pathname === "/api/audit") {
-      return sendOperatorReadJson(req, res, readDb().audits.slice().reverse());
+      return sendOperatorReadJson(req, res, (await readDb()).audits.slice().reverse());
     }
 
     if (req.method === "GET" && url.pathname === "/api/metrics") {
-      return sendOperatorReadJson(req, res, buildMetrics(readDb()));
+      return sendOperatorReadJson(req, res, buildMetrics(await readDb()));
     }
 
     return notFound(res);
@@ -142,14 +142,14 @@ server.listen(PORT, () => {
   console.log(`Control API listening on http://localhost:${PORT}`);
 });
 
-function registerCamera(req, res, body) {
+async function registerCamera(req, res, body) {
   const { cameraId, name, edgeNodeId, location, streamUri } = body;
   if (!cameraId || !name || !edgeNodeId) {
     return badRequest(res, "cameraId, name and edgeNodeId are required");
   }
 
   const issuedKey = issueDeviceKey();
-  const result = updateDb((db) => {
+  const result = await updateDb((db) => {
     let camera = db.cameras.find((item) => item.cameraId === cameraId);
     if (!camera) {
       camera = {
@@ -178,14 +178,14 @@ function registerCamera(req, res, body) {
   return sendJson(res, 200, result);
 }
 
-function updateCameraHealth(req, res, body) {
-  const auth = authenticateCamera(req, body.cameraId);
+async function updateCameraHealth(req, res, body) {
+  const auth = await authenticateCamera(req, body.cameraId);
   if (!auth.ok) return unauthorized(res, auth.message);
 
   const validation = validateContract(schemas.cameraHealth, body, "CameraHealth");
   if (!validation.valid) return badRequest(res, "CameraHealth contract failed", validation.errors);
 
-  const result = updateDb((db) => {
+  const result = await updateDb((db) => {
     const camera = db.cameras.find((item) => item.cameraId === body.cameraId);
     camera.status = body.status;
     camera.lastHeartbeat = body.ingestTime;
@@ -198,12 +198,12 @@ function updateCameraHealth(req, res, body) {
   return sendJson(res, 202, result);
 }
 
-function rotateCameraKey(req, res, body) {
-  const auth = authenticateCamera(req, body.cameraId);
+async function rotateCameraKey(req, res, body) {
+  const auth = await authenticateCamera(req, body.cameraId);
   if (!auth.ok) return unauthorized(res, auth.message);
 
   const issuedKey = issueDeviceKey();
-  const result = updateDb((db) => {
+  const result = await updateDb((db) => {
     const camera = db.cameras.find((item) => item.cameraId === body.cameraId);
     camera.deviceKeyHash = hashDeviceKey(issuedKey);
     delete camera.deviceKey;
@@ -216,14 +216,14 @@ function rotateCameraKey(req, res, body) {
 }
 
 async function createIncident(req, res, body) {
-  const auth = authenticateCamera(req, body.cameraId);
+  const auth = await authenticateCamera(req, body.cameraId);
   if (!auth.ok) return unauthorized(res, auth.message);
 
   const validation = validateContract(schemas.incident, body, "IncidentEvent");
   if (!validation.valid) return badRequest(res, "IncidentEvent contract failed", validation.errors);
 
   const idempotencyKey = req.headers["idempotency-key"] || body.eventId;
-  const result = updateDb((db) => {
+  const result = await updateDb((db) => {
     const existing = db.incidents.find((item) => item.idempotencyKey === idempotencyKey || item.eventId === body.eventId);
     if (existing) return { incident: existing, created: false };
 
@@ -248,7 +248,7 @@ async function updateIncidentLifecycle(req, res, { incidentId, action, body }) {
   const auth = authenticateOperator(req, { requiredPermission: permission });
   if (!auth.ok) return auth.statusCode === 403 ? forbidden(res, auth.message) : unauthorized(res, auth.message);
 
-  const result = updateDb((db) => {
+  const result = await updateDb((db) => {
     const incident = db.incidents.find((item) => item.incidentId === incidentId);
     if (!incident) return { found: false };
 
@@ -286,7 +286,7 @@ async function notifyAndAudit(eventName, incident, requestId) {
   const result = await notifyIncidentEvent({ eventName, incident });
   if (result.skipped) return result;
 
-  updateDb((db) => {
+  await updateDb((db) => {
     appendAudit(db, {
       actor: "control-api",
       action: result.delivered ? "notification.delivered" : "notification.failed",
@@ -298,10 +298,10 @@ async function notifyAndAudit(eventName, incident, requestId) {
   return result;
 }
 
-function createEvidenceManifest(req, res, body) {
-  const incident = readDb().incidents.find((item) => item.incidentId === body.incidentId);
+async function createEvidenceManifest(req, res, body) {
+  const incident = (await readDb()).incidents.find((item) => item.incidentId === body.incidentId);
   const cameraId = incident?.cameraId || req.headers["x-camera-id"];
-  const auth = authenticateCamera(req, cameraId);
+  const auth = await authenticateCamera(req, cameraId);
   if (!auth.ok) return unauthorized(res, auth.message);
 
   const validation = validateContract(schemas.evidence, body, "EvidenceManifest");
@@ -310,7 +310,7 @@ function createEvidenceManifest(req, res, body) {
   const evidenceCheck = verifyEvidenceManifest(body);
   if (!evidenceCheck.valid) return badRequest(res, "EvidenceManifest verification failed", evidenceCheck.errors);
 
-  const result = updateDb((db) => {
+  const result = await updateDb((db) => {
     const existing = db.evidence.find((item) => item.manifestId === body.manifestId);
     if (existing) return { manifest: existing, created: false };
 
@@ -347,11 +347,11 @@ function publicEvidenceManifest(manifest) {
   };
 }
 
-function serveEvidenceAsset(req, res, { manifestId, assetIndex }) {
+async function serveEvidenceAsset(req, res, { manifestId, assetIndex }) {
   const auth = authenticateOperator(req, { requiredPermission: "incident:read" });
   if (!auth.ok) return auth.statusCode === 403 ? forbidden(res, auth.message) : unauthorized(res, auth.message);
 
-  const manifest = readDb().evidence.find((item) => item.manifestId === manifestId);
+  const manifest = (await readDb()).evidence.find((item) => item.manifestId === manifestId);
   if (!manifest || manifest.status !== "VERIFIED") return notFound(res);
 
   const asset = manifest.assets?.[assetIndex];
@@ -379,11 +379,11 @@ function serveEvidenceAsset(req, res, { manifestId, assetIndex }) {
   fs.createReadStream(assetPath).pipe(res);
 }
 
-function runEvidenceRetention(req, res, body) {
+async function runEvidenceRetention(req, res, body) {
   const auth = authenticateOperator(req, { requiredPermission: "incident:escalate" });
   if (!auth.ok) return auth.statusCode === 403 ? forbidden(res, auth.message) : unauthorized(res, auth.message);
 
-  const result = updateDb((db) => {
+  const result = await updateDb((db) => {
     const retention = expireEvidenceManifests(db, {
       now: body.now ? new Date(body.now) : new Date(),
       retentionDays: body.retentionDays === undefined ? undefined : Number(body.retentionDays),
@@ -401,12 +401,12 @@ function runEvidenceRetention(req, res, body) {
   return sendJson(res, 200, result);
 }
 
-function authenticateCamera(req, cameraId) {
+async function authenticateCamera(req, cameraId) {
   const deviceKey = req.headers["x-device-key"];
   if (!cameraId) return { ok: false, message: "cameraId is required" };
   if (!deviceKey) return { ok: false, message: "x-device-key header is required" };
 
-  const camera = readDb().cameras.find((item) => item.cameraId === cameraId);
+  const camera = (await readDb()).cameras.find((item) => item.cameraId === cameraId);
   if (!camera) return { ok: false, message: "camera is not registered" };
   if (!verifyDeviceKey({ providedKey: deviceKey, storedHash: camera.deviceKeyHash, legacyPlaintextKey: camera.deviceKey })) {
     return { ok: false, message: "device key mismatch" };
