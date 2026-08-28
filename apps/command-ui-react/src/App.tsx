@@ -1,46 +1,11 @@
-import { useEffect, useMemo, useState } from "react";
-import { fetchDashboardData } from "./api";
-import type { DashboardData, OperatorRole } from "./types";
-
-const emptyData: DashboardData = {
-  health: { status: "unknown", service: "control-api", time: "" },
-  cameras: [],
-  zones: [],
-  incidents: [],
-  evidence: [],
-  audit: [],
-  metrics: {}
-};
+import { useState } from "react";
+import { useDashboardData } from "./hooks/useDashboardData";
+import type { Incident, OperatorRole } from "./types";
 
 export function App() {
   const [role, setRole] = useState<OperatorRole>("COMMANDER");
-  const [data, setData] = useState<DashboardData>(emptyData);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-
-  const operator = useMemo(() => ({
-    operatorId: "sih-demo-operator",
-    role
-  }), [role]);
-
-  async function refresh() {
-    try {
-      setError(null);
-      const next = await fetchDashboardData(operator);
-      setData(next);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Control API unavailable");
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  useEffect(() => {
-    setLoading(true);
-    refresh();
-    const timer = window.setInterval(refresh, 30000);
-    return () => window.clearInterval(timer);
-  }, [operator]);
+  const { data, connectionState, error, refresh } = useDashboardData(role);
+  const loading = connectionState === "loading";
 
   const highCritical = (data.metrics.incidents?.bySeverity?.HIGH || 0) + (data.metrics.incidents?.bySeverity?.CRITICAL || 0);
   const openIncidents = data.metrics.incidents?.open ?? data.incidents.filter((incident) => incident.status === "OPEN").length;
@@ -64,7 +29,7 @@ export function App() {
           </label>
           <button type="button" onClick={refresh}>Refresh</button>
           <span className="status" data-state={error ? "offline" : "online"}>
-            {error ? "Offline" : data.health.status === "ok" ? "Online" : "Checking"}
+            {error ? "Offline" : connectionState === "live" ? "Live" : connectionState === "polling" ? "Polling" : "Checking"}
           </span>
         </div>
       </header>
@@ -80,8 +45,19 @@ export function App() {
         <Metric label="Evidence" value={data.metrics.evidence?.verified ?? data.evidence.length} />
       </section>
 
-      <section className="layout">
-        <Panel title="System Overview">
+      <section className="command-grid">
+        <Panel title="Incident Feed" wide>
+          {loading ? <EmptyState message="Loading incidents..." /> : null}
+          {!loading && data.incidents.length === 0 ? <EmptyState message="No incidents yet. Run the edge pipeline to populate the feed." /> : null}
+          <div className="incident-list">
+            {data.incidents.map((incident) => (
+              <IncidentCard incident={incident} key={incident.incidentId} />
+            ))}
+          </div>
+        </Panel>
+
+        <div className="side-stack">
+          <Panel title="System Overview">
           {loading ? (
             <EmptyState message="Loading command telemetry..." />
           ) : (
@@ -92,9 +68,9 @@ export function App() {
               <StatusLine label="Last Refresh" value={data.health.time ? formatTime(data.health.time) : "Waiting"} />
             </div>
           )}
-        </Panel>
+          </Panel>
 
-        <Panel title="Cameras">
+          <Panel title="Cameras">
           {loading ? <EmptyState message="Loading cameras..." /> : null}
           {!loading && data.cameras.length === 0 ? <EmptyState message="No cameras registered." /> : null}
           <div className="list">
@@ -108,7 +84,8 @@ export function App() {
               </article>
             ))}
           </div>
-        </Panel>
+          </Panel>
+        </div>
       </section>
     </main>
   );
@@ -123,14 +100,43 @@ function Metric({ label, value }: { label: string; value: number | string }) {
   );
 }
 
-function Panel({ title, children }: { title: string; children: React.ReactNode }) {
+function Panel({ title, children, wide = false }: { title: string; children: React.ReactNode; wide?: boolean }) {
   return (
-    <section className="panel">
+    <section className={wide ? "panel panel-wide" : "panel"}>
       <div className="panel-header">
         <h2>{title}</h2>
       </div>
       {children}
     </section>
+  );
+}
+
+function IncidentCard({ incident }: { incident: Incident }) {
+  return (
+    <article className="incident-card">
+      <div className="incident-title">
+        <span className={`severity ${String(incident.severity).toLowerCase()}`}>{incident.severity}</span>
+        <div>
+          <h3>{incident.type.replaceAll("_", " ")}</h3>
+          <p>{incident.cameraId} / {incident.zoneId}</p>
+        </div>
+        <span className="incident-status">{incident.status}</span>
+      </div>
+      <dl className="incident-meta">
+        <div>
+          <dt>Incident</dt>
+          <dd>{incident.incidentId}</dd>
+        </div>
+        <div>
+          <dt>Evidence SHA</dt>
+          <dd>{incident.evidence?.sha256 ? `${incident.evidence.sha256.slice(0, 18)}...` : "Unavailable"}</dd>
+        </div>
+        <div>
+          <dt>Captured</dt>
+          <dd>{formatTime(incident.captureTime)}</dd>
+        </div>
+      </dl>
+    </article>
   );
 }
 

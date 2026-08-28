@@ -179,15 +179,20 @@ h2 {
   font-size: 27px;
 }
 
-.layout {
+.command-grid {
   display: grid;
-  grid-template-columns: minmax(0, 1.1fr) minmax(360px, 0.9fr);
+  grid-template-columns: minmax(0, 1.45fr) minmax(360px, 0.75fr);
   gap: 14px;
+  align-items: start;
 }
 
 .panel {
   min-height: 260px;
   padding: 16px;
+}
+
+.panel-wide {
+  min-height: 520px;
 }
 
 .panel-header {
@@ -196,7 +201,9 @@ h2 {
 }
 
 .overview-grid,
-.list {
+.list,
+.side-stack,
+.incident-list {
   display: grid;
   gap: 10px;
 }
@@ -220,9 +227,78 @@ h2 {
   margin-bottom: 4px;
 }
 
+.incident-card {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel-raised);
+  padding: 14px;
+}
+
+.incident-title {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 14px;
+}
+
+.incident-title h3 {
+  margin: 0 0 4px;
+  font-size: 15px;
+  text-transform: uppercase;
+}
+
+.incident-title p {
+  color: var(--muted);
+}
+
+.severity {
+  border-radius: 999px;
+  color: #101214;
+  background: var(--warn);
+  padding: 6px 9px;
+  font-size: 11px;
+  font-weight: 900;
+}
+
+.severity.high,
+.severity.critical {
+  background: var(--danger);
+}
+
+.severity.low {
+  background: var(--info);
+}
+
+.incident-status {
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 5px 9px;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.incident-meta {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+  margin: 0;
+}
+
+.incident-meta dt {
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.incident-meta dd {
+  margin: 4px 0 0;
+  overflow-wrap: anywhere;
+}
+
 @media (max-width: 940px) {
   .metrics,
-  .layout {
+  .command-grid {
     grid-template-columns: 1fr 1fr;
   }
 }
@@ -230,7 +306,8 @@ h2 {
 @media (max-width: 680px) {
   .topbar,
   .metrics,
-  .layout {
+  .command-grid,
+  .incident-meta {
     grid-template-columns: 1fr;
   }
 
