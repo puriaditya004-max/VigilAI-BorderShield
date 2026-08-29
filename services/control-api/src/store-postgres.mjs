@@ -55,7 +55,7 @@ export async function updateDb(mutator) {
   try {
     await client.query("BEGIN");
     const db = await readDbWithClient(client);
-    const result = mutator(db);
+    const result = await mutator(db);
     await writeDbWithClient(client, db);
     await client.query("COMMIT");
     return result;

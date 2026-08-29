@@ -156,15 +156,19 @@ async function login(req, res, body) {
       ? sendJson(res, 503, { error: "auth_dependency_unavailable", message: result.message })
       : unauthorized(res, result.message);
   }
-  updateDb((db) => {
-    appendAudit(db, {
-      actor: result.operator.operatorId,
-      action: "operator.login",
-      resource: result.operator.role,
-      requestId: req.headers["idempotency-key"]
-    });
-    return null;
-  }).catch((error) => console.error(`operator login audit failed: ${error.message}`));
+  try {
+    await Promise.resolve(updateDb((db) => {
+      appendAudit(db, {
+        actor: result.operator.operatorId,
+        action: "operator.login",
+        resource: result.operator.role,
+        requestId: req.headers["idempotency-key"]
+      });
+      return db;
+    }));
+  } catch (error) {
+    console.error(`operator login audit failed: ${error.message}`);
+  }
   return sendJson(res, 200, {
     token: result.token,
     operator: result.operator
@@ -322,7 +326,7 @@ async function notifyAndAudit(eventName, incident, requestId) {
       resource: incident.incidentId,
       requestId
     });
-    return null;
+    return db;
   });
   return result;
 }

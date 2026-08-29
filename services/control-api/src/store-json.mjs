@@ -36,9 +36,9 @@ export function writeDb(db) {
   fs.writeFileSync(DB_PATH, `${JSON.stringify(db, null, 2)}\n`);
 }
 
-export function updateDb(mutator) {
+export async function updateDb(mutator) {
   const db = readDb();
-  const result = mutator(db);
+  const result = await mutator(db);
   writeDb(db);
   return result;
 }
