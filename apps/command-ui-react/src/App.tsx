@@ -63,49 +63,50 @@ export function App() {
         </div>
       </header>
 
-      {error ? <div className="banner">Control API unavailable: {error}</div> : null}
-      {loginOpen ? (
-        <form className="login-panel" onSubmit={async (event) => {
-          event.preventDefault();
-          setLoginPending(true);
-          setLoginError(null);
-          try {
-            const result = await loginOperator(loginForm.username, loginForm.password);
-            const nextSession = { ...result.operator, token: result.token };
-            window.localStorage.setItem("vigilai.operatorSession", JSON.stringify(nextSession));
-            setRole(nextSession.role);
-            setSession(nextSession);
-            setLoginOpen(false);
-            setLoginForm({ username: "", password: "" });
-          } catch (err) {
-            setLoginError(err instanceof Error ? err.message : "Login failed");
-          } finally {
-            setLoginPending(false);
-          }
-        }}>
-          <label>
-            <span>Username</span>
-            <input value={loginForm.username} onChange={(event) => setLoginForm({ ...loginForm, username: event.target.value })} autoComplete="username" />
-          </label>
-          <label>
-            <span>Password</span>
-            <input type="password" value={loginForm.password} onChange={(event) => setLoginForm({ ...loginForm, password: event.target.value })} autoComplete="current-password" />
-          </label>
-          <button type="submit" disabled={loginPending}>{loginPending ? "Signing In..." : "Sign In"}</button>
-          {loginError ? <p className="error-text">{loginError}</p> : null}
-        </form>
-      ) : null}
+      <div className="scroll-region">
+        {error ? <div className="banner">Control API unavailable: {error}</div> : null}
+        {loginOpen ? (
+          <form className="login-panel" onSubmit={async (event) => {
+            event.preventDefault();
+            setLoginPending(true);
+            setLoginError(null);
+            try {
+              const result = await loginOperator(loginForm.username, loginForm.password);
+              const nextSession = { ...result.operator, token: result.token };
+              window.localStorage.setItem("vigilai.operatorSession", JSON.stringify(nextSession));
+              setRole(nextSession.role);
+              setSession(nextSession);
+              setLoginOpen(false);
+              setLoginForm({ username: "", password: "" });
+            } catch (err) {
+              setLoginError(err instanceof Error ? err.message : "Login failed");
+            } finally {
+              setLoginPending(false);
+            }
+          }}>
+            <label>
+              <span>Username</span>
+              <input value={loginForm.username} onChange={(event) => setLoginForm({ ...loginForm, username: event.target.value })} autoComplete="username" />
+            </label>
+            <label>
+              <span>Password</span>
+              <input type="password" value={loginForm.password} onChange={(event) => setLoginForm({ ...loginForm, password: event.target.value })} autoComplete="current-password" />
+            </label>
+            <button type="submit" disabled={loginPending}>{loginPending ? "Signing In..." : "Sign In"}</button>
+            {loginError ? <p className="error-text">{loginError}</p> : null}
+          </form>
+        ) : null}
 
-      <section className="metrics" aria-label="System overview">
-        <Metric label="Cameras" value={data.metrics.cameras?.total ?? data.cameras.length} />
-        <Metric label="Online" value={data.metrics.cameras?.online ?? data.cameras.filter((camera) => camera.status === "ONLINE").length} />
-        <Metric label="Open Incidents" value={openIncidents} />
-        <Metric label="High/Critical" value={highCritical} />
-        <Metric label="Audit Events" value={data.metrics.audit?.total ?? data.audit.length} />
-        <Metric label="Evidence" value={data.metrics.evidence?.verified ?? data.evidence.length} />
-      </section>
+        <section className="metrics" aria-label="System overview">
+          <Metric label="Cameras" value={data.metrics.cameras?.total ?? data.cameras.length} />
+          <Metric label="Online" value={data.metrics.cameras?.online ?? data.cameras.filter((camera) => camera.status === "ONLINE").length} />
+          <Metric label="Open Incidents" value={openIncidents} />
+          <Metric label="High/Critical" value={highCritical} />
+          <Metric label="Audit Events" value={data.metrics.audit?.total ?? data.audit.length} />
+          <Metric label="Evidence" value={data.metrics.evidence?.verified ?? data.evidence.length} />
+        </section>
 
-      <section className="command-grid">
+        <section className="command-grid">
         <Panel title="Incident Feed" wide>
           {loading ? <EmptyState message="Loading incidents..." /> : null}
           {!loading && data.incidents.length === 0 ? <EmptyState message="No incidents yet. Run the edge pipeline to populate the feed." /> : null}
@@ -203,7 +204,8 @@ export function App() {
             </div>
           </Panel>
         </div>
-      </section>
+        </section>
+      </div>
     </main>
   );
 }
