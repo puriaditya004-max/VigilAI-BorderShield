@@ -1,4 +1,5 @@
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
+import type { Ref } from "react";
 import { evidenceAssetUrl, loginOperator, updateIncidentStatus } from "./api";
 import { useDashboardData } from "./hooks/useDashboardData";
 import type { EvidenceManifest, Incident, OperatorRole, OperatorSession } from "./types";
@@ -17,6 +18,7 @@ export function App() {
   const [actionNote, setActionNote] = useState("");
   const [actionError, setActionError] = useState<string | null>(null);
   const [pendingAction, setPendingAction] = useState<"acknowledge" | "escalate" | null>(null);
+  const detailPanelRef = useRef<HTMLElement | null>(null);
   const operator = useMemo(() => session.token ? session : { ...session, role }, [role, session]);
   const { data, connectionState, error, refresh, setData } = useDashboardData(operator);
   const loading = connectionState === "loading";
@@ -25,6 +27,10 @@ export function App() {
 
   const highCritical = (data.metrics.incidents?.bySeverity?.HIGH || 0) + (data.metrics.incidents?.bySeverity?.CRITICAL || 0);
   const openIncidents = data.metrics.incidents?.open ?? data.incidents.filter((incident) => incident.status === "OPEN").length;
+  const selectIncident = (incidentId: string) => {
+    setSelectedIncidentId(incidentId);
+    detailPanelRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+  };
 
   return (
     <main className="shell">
@@ -116,7 +122,7 @@ export function App() {
                 incident={incident}
                 key={incident.incidentId}
                 selected={selectedIncident?.incidentId === incident.incidentId}
-                onSelect={() => setSelectedIncidentId(incident.incidentId)}
+                onSelect={() => selectIncident(incident.incidentId)}
               />
             ))}
           </div>
@@ -152,7 +158,7 @@ export function App() {
           </div>
           </Panel>
 
-          <Panel title="Incident Detail">
+          <Panel title="Incident Detail" ref={detailPanelRef}>
             {selectedIncident ? (
               <IncidentDetail
                 incident={selectedIncident}
@@ -228,9 +234,9 @@ function Metric({ label, value }: { label: string; value: number | string }) {
   );
 }
 
-function Panel({ title, children, wide = false }: { title: string; children: React.ReactNode; wide?: boolean }) {
+function Panel({ title, children, wide = false, ref }: { title: string; children: React.ReactNode; wide?: boolean; ref?: Ref<HTMLElement> }) {
   return (
-    <section className={wide ? "panel panel-wide" : "panel"}>
+    <section className={wide ? "panel panel-wide" : "panel"} ref={ref}>
       <div className="panel-header">
         <h2>{title}</h2>
       </div>

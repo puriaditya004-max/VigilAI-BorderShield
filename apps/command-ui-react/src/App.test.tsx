@@ -77,6 +77,25 @@ describe("React command center", () => {
     expect(topbar).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Refresh" })).toBeEnabled();
   });
+
+  it("scrolls the incident detail panel into view when an incident is selected", async () => {
+    const scrollIntoView = vi.fn();
+    const originalScrollIntoView = (Element.prototype as { scrollIntoView?: Element["scrollIntoView"] }).scrollIntoView;
+    (Element.prototype as { scrollIntoView?: Element["scrollIntoView"] }).scrollIntoView = scrollIntoView;
+
+    try {
+      const incidents = buildIncidents(3);
+      mockFetch({ incidents });
+      render(<App />);
+
+      await screen.findAllByText("VIRTUAL FENCE INTRUSION");
+      fireEvent.click(screen.getByRole("button", { name: /inc-002/i }));
+
+      expect(scrollIntoView).toHaveBeenCalledWith({ behavior: "smooth", block: "start" });
+    } finally {
+      (Element.prototype as { scrollIntoView?: Element["scrollIntoView"] }).scrollIntoView = originalScrollIntoView;
+    }
+  });
 });
 
 function mockFetch(overrides: Partial<MockData> = {}) {
