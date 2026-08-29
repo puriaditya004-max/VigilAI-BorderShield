@@ -1,6 +1,7 @@
 import { useMemo, useRef, useState } from "react";
 import type { Ref } from "react";
-import { evidenceAssetUrl, loginOperator, updateIncidentStatus } from "./api";
+import { loginOperator, updateIncidentStatus } from "./api";
+import { useAuthenticatedAssetUrl } from "./hooks/useAuthenticatedAssetUrl";
 import { useDashboardData } from "./hooks/useDashboardData";
 import type { EvidenceManifest, Incident, OperatorRole, OperatorSession } from "./types";
 
@@ -163,6 +164,7 @@ export function App() {
               <IncidentDetail
                 incident={selectedIncident}
                 evidence={selectedEvidence}
+                operator={operator}
                 note={actionNote}
                 actionError={actionError}
                 pendingAction={pendingAction}
@@ -277,6 +279,7 @@ function IncidentCard({ incident, selected, onSelect }: { incident: Incident; se
 function IncidentDetail({
   incident,
   evidence,
+  operator,
   note,
   actionError,
   pendingAction,
@@ -285,6 +288,7 @@ function IncidentDetail({
 }: {
   incident: Incident;
   evidence: EvidenceManifest | null;
+  operator: OperatorSession;
   note: string;
   actionError: string | null;
   pendingAction: "acknowledge" | "escalate" | null;
@@ -293,6 +297,8 @@ function IncidentDetail({
 }) {
   const imageAsset = evidence?.assets.find((asset) => asset.contentType?.startsWith("image/"));
   const videoAsset = evidence?.assets.find((asset) => asset.contentType === "video/mp4");
+  const image = useAuthenticatedAssetUrl(imageAsset?.assetUrl, operator);
+  const video = useAuthenticatedAssetUrl(videoAsset?.assetUrl, operator);
   const unavailableReasons = evidence?.metadata?.clipReasonCodes || [];
   const canAcknowledge = incident.status === "OPEN";
 
@@ -327,12 +333,24 @@ function IncidentDetail({
       <section className="evidence-box">
         <h4>Evidence</h4>
         {imageAsset ? (
-          <img src={evidenceAssetUrl(imageAsset.assetUrl)} alt={`Evidence keyframe for ${incident.incidentId}`} />
+          image.loading ? (
+            <div className="empty">Loading evidence keyframe...</div>
+          ) : image.error ? (
+            <div className="empty error-state">Evidence failed to load: {image.error}</div>
+          ) : image.url ? (
+            <img src={image.url} alt={`Evidence keyframe for ${incident.incidentId}`} />
+          ) : null
         ) : (
           <div className="empty">Evidence unavailable: keyframe asset not present</div>
         )}
         {videoAsset ? (
-          <video src={evidenceAssetUrl(videoAsset.assetUrl)} controls />
+          video.loading ? (
+            <div className="empty">Loading evidence clip...</div>
+          ) : video.error ? (
+            <div className="empty error-state">Evidence clip failed to load: {video.error}</div>
+          ) : video.url ? (
+            <video src={video.url} controls />
+          ) : null
         ) : (
           <div className="empty">Evidence unavailable: {unavailableReasons.length ? unavailableReasons.join(", ") : "MP4 clip asset not present"}</div>
         )}

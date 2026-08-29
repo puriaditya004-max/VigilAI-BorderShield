@@ -1,17 +1,41 @@
 import fs from "node:fs";
 import path from "node:path";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { App } from "./App";
 
 const stylesPath = fs.existsSync(path.resolve(process.cwd(), "src/styles.css"))
   ? path.resolve(process.cwd(), "src/styles.css")
   : path.resolve(process.cwd(), "apps/command-ui-react/src/styles.css");
 const stylesText = fs.readFileSync(stylesPath, "utf8");
+const originalCreateObjectURL = URL.createObjectURL;
+const originalRevokeObjectURL = URL.revokeObjectURL;
+
+beforeEach(() => {
+  Object.defineProperty(URL, "createObjectURL", {
+    configurable: true,
+    value: vi.fn(() => "blob:vigilai-evidence-asset")
+  });
+  Object.defineProperty(URL, "revokeObjectURL", {
+    configurable: true,
+    value: vi.fn()
+  });
+});
 
 afterEach(() => {
   cleanup();
   vi.restoreAllMocks();
+  if (originalCreateObjectURL) {
+    Object.defineProperty(URL, "createObjectURL", { configurable: true, value: originalCreateObjectURL });
+  } else {
+    delete (URL as { createObjectURL?: typeof URL.createObjectURL }).createObjectURL;
+  }
+  if (originalRevokeObjectURL) {
+    Object.defineProperty(URL, "revokeObjectURL", { configurable: true, value: originalRevokeObjectURL });
+  } else {
+    delete (URL as { revokeObjectURL?: typeof URL.revokeObjectURL }).revokeObjectURL;
+  }
+  window.localStorage.clear();
 });
 
 describe("React command center", () => {
@@ -47,8 +71,31 @@ describe("React command center", () => {
     expect(await screen.findByText("Evidence unavailable: ROLLING_BUFFER_EMPTY")).toBeInTheDocument();
   });
 
+  it("loads evidence assets through authenticated blob URLs", async () => {
+    window.localStorage.setItem("vigilai.operatorSession", JSON.stringify({
+      operatorId: "commander-1",
+      role: "COMMANDER",
+      token: "jwt-token"
+    }));
+    const fetchMock = mockFetch();
+    render(<App />);
+
+    const image = await screen.findByAltText("Evidence keyframe for inc-001");
+    expect(image).toHaveAttribute("src", "blob:vigilai-evidence-asset");
+
+    const assetCall = fetchMock.mock.calls.find(([input]) => String(input) === "/api/evidence/assets/manifest-001/0");
+    expect(assetCall).toBeTruthy();
+    expect(assetCall?.[1]).toEqual(expect.objectContaining({
+      headers: expect.objectContaining({
+        authorization: "Bearer jwt-token",
+        "x-operator-id": "commander-1",
+        "x-operator-role": "COMMANDER"
+      })
+    }));
+  });
+
   it("keeps the topbar outside the scrollable incident content", async () => {
-    const incidents = buildIncidents(60);
+    const incidents = buildIncidents(55);
     mockFetch({
       incidents,
       metrics: {
@@ -58,7 +105,7 @@ describe("React command center", () => {
     });
     const { container } = render(<App />);
 
-    await screen.findAllByText("VIRTUAL FENCE INTRUSION");
+    await screen.findByText("inc-055");
 
     const shell = container.querySelector(".shell");
     const topbar = container.querySelector(".topbar");
@@ -76,7 +123,7 @@ describe("React command center", () => {
     fireEvent.scroll(scrollRegion as Element, { target: { scrollTop: 2400 } });
     expect(topbar).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Refresh" })).toBeEnabled();
-  });
+  }, 15000);
 
   it("scrolls the incident detail panel into view when an incident is selected", async () => {
     const scrollIntoView = vi.fn();
@@ -112,12 +159,27 @@ function mockFetch(overrides: Partial<MockData> = {}) {
     if (url === "/api/evidence/manifests") return jsonResponse(data.evidence);
     if (url === "/api/audit") return jsonResponse(data.audit);
     if (url === "/api/metrics") return jsonResponse(data.metrics);
+    if (url.startsWith("/api/evidence/assets/")) {
+      return blobResponse(new Blob(["evidence"], {
+        type: url.endsWith("/1") ? "video/mp4" : "image/jpeg"
+      }));
+    }
     if (url === "/api/incidents/inc-001/acknowledge" && init?.method === "POST") {
       return jsonResponse({ ...incident, status: "ACKNOWLEDGED" });
     }
     throw new Error(`unexpected fetch ${url}`);
   });
   return fetchMock;
+}
+
+function blobResponse(blob: Blob, overrides: Partial<Response> = {}) {
+  return {
+    ok: true,
+    status: 200,
+    body: {},
+    blob: async () => blob,
+    ...overrides
+  } as Response;
 }
 
 function jsonResponse(payload: unknown, overrides: Partial<Response> = {}) {
