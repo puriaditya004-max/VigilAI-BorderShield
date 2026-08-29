@@ -1,6 +1,13 @@
+import fs from "node:fs";
+import path from "node:path";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { App } from "./App";
+
+const stylesPath = fs.existsSync(path.resolve(process.cwd(), "src/styles.css"))
+  ? path.resolve(process.cwd(), "src/styles.css")
+  : path.resolve(process.cwd(), "apps/command-ui-react/src/styles.css");
+const stylesText = fs.readFileSync(stylesPath, "utf8");
 
 afterEach(() => {
   cleanup();
@@ -38,6 +45,37 @@ describe("React command center", () => {
     render(<App />);
 
     expect(await screen.findByText("Evidence unavailable: ROLLING_BUFFER_EMPTY")).toBeInTheDocument();
+  });
+
+  it("keeps the topbar outside the scrollable incident content", async () => {
+    const incidents = buildIncidents(60);
+    mockFetch({
+      incidents,
+      metrics: {
+        ...baseData.metrics,
+        incidents: { total: incidents.length, open: incidents.length, bySeverity: { HIGH: incidents.length }, sla: { overdue: 0 } }
+      }
+    });
+    const { container } = render(<App />);
+
+    await screen.findAllByText("VIRTUAL FENCE INTRUSION");
+
+    const shell = container.querySelector(".shell");
+    const topbar = container.querySelector(".topbar");
+    const scrollRegion = container.querySelector(".scroll-region");
+    expect(shell).toBeInTheDocument();
+    expect(topbar).toBeInTheDocument();
+    expect(scrollRegion).toBeInTheDocument();
+    expect(scrollRegion?.contains(topbar)).toBe(false);
+
+    expect(stylesText).toMatch(/html,\s*body,\s*#root\s*{[^}]*overflow:\s*hidden/s);
+    expect(stylesText).toMatch(/\.shell\s*{[^}]*position:\s*fixed[^}]*overflow:\s*hidden/s);
+    expect(stylesText).toMatch(/\.topbar\s*{[^}]*position:\s*sticky/s);
+    expect(stylesText).toMatch(/\.scroll-region\s*{[^}]*overflow-y:\s*auto/s);
+
+    fireEvent.scroll(scrollRegion as Element, { target: { scrollTop: 2400 } });
+    expect(topbar).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Refresh" })).toBeEnabled();
   });
 });
 
@@ -109,6 +147,15 @@ const evidenceManifest = {
   ],
   metadata: { evidenceMode: "REAL_FRAME_KEYFRAME" }
 };
+
+function buildIncidents(count: number) {
+  return Array.from({ length: count }, (_, index) => ({
+    ...incident,
+    incidentId: `inc-${String(index + 1).padStart(3, "0")}`,
+    captureTime: new Date(Date.UTC(2026, 7, 28, 8, index, 0)).toISOString(),
+    evidence: { ...incident.evidence, manifestId: `manifest-${String(index + 1).padStart(3, "0")}` }
+  }));
+}
 
 const baseData = {
   health: { status: "ok", service: "control-api", time: "2026-08-28T08:00:01.000Z" },
